@@ -1,0 +1,54 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Content integration fixture</title></head><body>
+<div data-message-author-role="user">I studied random matrix products.</div>
+<form><textarea id="prompt-textarea"></textarea><button type="button" data-testid="send-button">Send</button></form>
+<pre id="results">RUNNING</pre>
+<script>
+const calls = [];
+let changed, routeFailure = false, handoffRecord;
+const nativeAttach = Element.prototype.attachShadow;
+Element.prototype.attachShadow = function(options) { return nativeAttach.call(this, {...options, mode:'open'}); };
+if(location.hash === '#destination') handoffRecord={project:'Job Search',text:'Current request:\nresume interview'};
+window.chrome = {
+ storage:{local:{async get(){return {settings:{...SCR.defaults,projects:SCR.defaults.projects.map(p=>({...p,url:'https://chatgpt.com/c/'+p.id}))}};}},onChanged:{addListener(fn){changed=fn;}}},
+ runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};return {ok:true};}}
+};
+</script><script src="../core.js"></script><script src="../content.js"></script><script>
+window.addEventListener('DOMContentLoaded',async()=>{
+ const wait=()=>new Promise(r=>setTimeout(r,30)); await wait();
+ const out=[], el=document.querySelector('textarea'), send=document.querySelector('button'); let sent=0;
+ send.addEventListener('click',()=>sent++);
+ const check=(condition,label)=>{if(!condition)throw Error(label);out.push('PASS '+label);};
+ const draft=text=>{el.value=text;el.dispatchEvent(new Event('input',{bubbles:true}));};
+ const button=label=>[...document.querySelectorAll('div')].flatMap(e=>e.shadowRoot?[...e.shadowRoot.querySelectorAll('button')]:[]).find(b=>b.textContent===label);
+ try {
+  if(handoffRecord){
+    check(!!button('Insert handoff'),'destination handoff displayed');
+    draft('existing draft');button('Insert handoff').click();await wait();
+    check(el.value==='existing draft','existing draft never overwritten');
+    draft('');button('Insert handoff').click();await wait();
+    check(el.value===handoffRecord.text,'handoff inserted through textarea input');
+    send.click();await wait();check(sent===1 && !calls.some(c=>c.type==='route'),'destination send bypasses router');
+    el.value='';await new Promise(r=>setTimeout(r,1100));
+    draft('resume interview');send.click();await wait();
+    check(calls.some(c=>c.type==='route'),'routing re-enabled for next draft');
+  } else {
+    draft('hello there');send.click();check(sent===1,'low confidence sends normally');
+    draft('resume');send.click();check(sent===1,'medium confidence holds send');
+    check(!!button('Route with context'),'medium suggestion visible');
+    button('Send here').click();await wait();check(sent===2,'send here passes through exactly once');
+    draft('resume interview');send.click();await wait();
+    check(sent===2 && calls.filter(c=>c.type==='route').length===1,'high confidence routes without sending');
+    check(el.value==='resume interview','source draft preserved');
+    check(calls.find(c=>c.type==='route').text.includes('random matrix'),'recent context included');
+    draft('resume interview');el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true}));await wait();
+    check(calls.filter(c=>c.type==='route').length===1,'shift Enter is not routed');
+    el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true,cancelable:true}));await wait();
+    check(calls.filter(c=>c.type==='route').length===1,'IME composition is not routed');
+    routeFailure=true;el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await wait();
+    check(!!button('Send here') && el.value==='resume interview','route failure retains draft and offers recovery');
+    changed({settings:{newValue:{...SCR.defaults,enabled:false}}},'local');send.click();check(sent===3,'disabled router sends normally');
+  }
+  document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';
+ }catch(e){document.querySelector('#results').textContent=out.join('\n')+'\nFAIL '+e.stack;}
+});
+</script></body></html>
