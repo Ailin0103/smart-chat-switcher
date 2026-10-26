@@ -77,7 +77,7 @@ Automated logic tests (Node.js 18+):
 node --test tests/*.test.cjs
 ```
 
-Browser integration fixtures: open `tests/content.fixture.html` in Chrome. The page must show **ALL PASSED**. Then open the same file with `#destination` at the end of its URL for destination insertion and loop-prevention checks. These fixtures run the real content script against a small simulated composer and mocked Chrome APIs; they do not load the extension or connect to ChatGPT.
+Browser integration fixtures: open `tests/content.fixture.html` in Chrome. The page must show **ALL PASSED**. Add `?legacy=1` to exercise the old textarea and send-button markers, `?current=1` for the `Chat with ChatGPT` textarea and `Send message` button, or `?fallback=1#destination` for destination insertion when the composer has an unfamiliar label. Open with only `#destination` for the standard destination flow. These fixtures run the real content script against simulated composers and mocked Chrome APIs; they do not load the extension or connect to ChatGPT.
 
 Manual checks on ChatGPT after loading the extension:
 

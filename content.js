@@ -1,9 +1,24 @@
 (() => {
   let settings = SCR.defaults, ready = false, busy = false, bypass = false, pending = null, destination = false, hadDestinationDraft = false;
   let host, panel;
-  const composer = () => document.querySelector('#prompt-textarea[contenteditable="true"], textarea#prompt-textarea');
+  const visible = el => {
+    if (!el || !el.isConnected || el.closest('[aria-hidden="true"]') || !el.getClientRects().length) return false;
+    const style = getComputedStyle(el);
+    return style.display !== 'none' && style.visibility === 'visible' && Number(style.opacity) > 0;
+  };
+  const sendSelector = 'button[data-testid="send-button"], button#composer-submit-button, button[type="submit"][aria-label="Send" i], button[type="submit"][aria-label="Send message" i]';
+  const composer = () => {
+    const known = [...document.querySelectorAll('div[contenteditable="true"][role="textbox"][aria-label="Ask ChatGPT" i], #prompt-textarea[contenteditable="true"], textarea#prompt-textarea, textarea[aria-label="Chat with ChatGPT" i][placeholder="Ask ChatGPT" i]')].find(el => visible(el) && !el.disabled);
+    if (known) return known;
+    const candidates = [...document.querySelectorAll('main form textarea, main form [contenteditable="true"][role="textbox"]')].filter(el => visible(el) && !el.disabled && [...el.closest('form').querySelectorAll(sendSelector)].some(visible));
+    return candidates.length === 1 ? candidates[0] : null;
+  };
   const value = el => el ? ('value' in el ? el.value : el.innerText).trim() : '';
-  const sendButton = () => document.querySelector('button[data-testid="send-button"], button#composer-submit-button');
+  const sendButton = () => {
+    const form = composer()?.closest('form');
+    if (!form) return null;
+    return [...form.querySelectorAll(sendSelector)].find(visible) || null;
+  };
   const rpc = async data => {
     const result = await chrome.runtime.sendMessage(data);
     if (!result?.ok) throw Error(result?.error || 'Extension unavailable. Refresh this page.');
@@ -54,8 +69,8 @@
     const el = composer();
     if (!el) return;
     if (event.type === 'keydown' && (event.target !== el && !el.contains(event.target) || event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229 || event.ctrlKey || event.altKey || event.metaKey)) return;
-    if (event.type === 'click' && !event.target.closest?.('button[data-testid="send-button"], button#composer-submit-button')) return;
-    if (event.type === 'submit' && !event.target.contains(el)) return;
+    if (event.type === 'click' && event.target.closest?.('button') !== sendButton()) return;
+    if (event.type === 'submit' && event.target !== el.closest('form')) return;
     if (destination) { hadDestinationDraft = !!value(el); return; }
     if (bypass) return;
     if (!ready || !settings.enabled) return;

@@ -1,6 +1,14 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Content integration fixture</title></head><body>
+<!doctype html><html><head><meta charset="utf-8"><title>Content integration fixture</title><style>.composer{min-height:32px;border:1px solid #888}.hidden{display:none}</style></head><body>
 <div data-message-author-role="user">I studied random matrix products.</div>
-<form><textarea id="prompt-textarea"></textarea><button type="button" data-testid="send-button">Send</button></form>
+<main>
+  <form id="main-composer-form">
+    <div id="modern-composer" class="composer" contenteditable="true" role="textbox" aria-label="Ask ChatGPT"></div>
+    <textarea id="prompt-textarea" class="hidden"></textarea>
+    <button id="modern-send" type="submit" aria-label="Send">Send</button>
+    <button id="legacy-send" class="hidden" type="button" data-testid="send-button">Legacy send</button>
+  </form>
+  <form id="unrelated-form"><div id="unrelated-composer" class="composer" contenteditable="true" role="textbox" aria-label="Search"></div><button id="unrelated-send" type="button" aria-label="Send">Other send</button></form>
+</main>
 <pre id="results">RUNNING</pre>
 <script>
 const calls = [];
@@ -8,47 +16,78 @@ let changed, routeFailure = false, handoffRecord;
 const nativeAttach = Element.prototype.attachShadow;
 Element.prototype.attachShadow = function(options) { return nativeAttach.call(this, {...options, mode:'open'}); };
 if(location.hash === '#destination') handoffRecord={project:'Job Search',text:'Current request:\nresume interview'};
+if(new URLSearchParams(location.search).has('legacy')) {
+  document.querySelector('#modern-composer').remove();
+  document.querySelector('#modern-send').remove();
+  document.querySelector('#prompt-textarea').classList.remove('hidden');
+  document.querySelector('#legacy-send').classList.remove('hidden');
+}
+if(new URLSearchParams(location.search).has('current')) {
+  document.querySelector('#modern-composer').remove();
+  const mobile=document.querySelector('#prompt-textarea');
+  mobile.id='mobile-composer-prompt';
+  mobile.classList.remove('hidden');
+  mobile.setAttribute('aria-label','Chat with ChatGPT');
+  mobile.setAttribute('placeholder','Ask ChatGPT');
+  document.querySelector('#modern-send').setAttribute('aria-label','Send message');
+}
+if(new URLSearchParams(location.search).has('fallback')) {
+  document.querySelector('#modern-composer').setAttribute('aria-label','Message');
+  document.querySelector('#modern-send').setAttribute('aria-label','Send message');
+}
 window.chrome = {
  storage:{local:{async get(){return {settings:{...SCR.defaults,projects:SCR.defaults.projects.map(p=>({...p,url:'https://chatgpt.com/c/'+p.id}))}};}},onChanged:{addListener(fn){changed=fn;}}},
  runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};return {ok:true};}}
 };
 </script><script src="../core.js"></script><script src="../content.js"></script><script>
-window.addEventListener('DOMContentLoaded',async()=>{
+void (async()=>{
  const wait=()=>new Promise(r=>setTimeout(r,30)); await wait();
- const out=[], el=document.querySelector('textarea'), send=document.querySelector('button'); let sent=0;
+ const out=[], el=document.querySelector('#modern-composer:not(.hidden)') || document.querySelector('#mobile-composer-prompt') || document.querySelector('#prompt-textarea'), send=document.querySelector('#modern-send:not(.hidden)') || document.querySelector('#legacy-send'); let sent=0, unrelatedSent=0;
  send.addEventListener('click',()=>sent++);
+ document.querySelector('#main-composer-form').addEventListener('submit',event=>event.preventDefault());
+ document.querySelector('#unrelated-send').addEventListener('click',()=>unrelatedSent++);
  const check=(condition,label)=>{if(!condition)throw Error(label);out.push('PASS '+label);};
- const draft=text=>{el.value=text;el.dispatchEvent(new Event('input',{bubbles:true}));};
+ const currentValue=()=>el instanceof HTMLTextAreaElement?el.value:el.innerText;
+ const draft=text=>{if(el instanceof HTMLTextAreaElement)el.value=text;else el.innerText=text;el.dispatchEvent(new Event('input',{bubbles:true}));};
+ const enter=(options={})=>{const event=new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...options});el.dispatchEvent(event);if(!event.defaultPrevented && !options.shiftKey && !options.isComposing)send.click();return event;};
  const button=label=>[...document.querySelectorAll('div')].flatMap(e=>e.shadowRoot?[...e.shadowRoot.querySelectorAll('button')]:[]).find(b=>b.textContent===label);
  try {
   if(handoffRecord){
     check(!!button('Insert handoff'),'destination handoff displayed');
     draft('existing draft');button('Insert handoff').click();await wait();
-    check(el.value==='existing draft','existing draft never overwritten');
+    check(currentValue()==='existing draft','existing draft never overwritten');
     draft('');button('Insert handoff').click();await wait();
-    check(el.value===handoffRecord.text,'handoff inserted through textarea input');
+    check(currentValue()===handoffRecord.text,'handoff inserted through composer input');
     send.click();await wait();check(sent===1 && !calls.some(c=>c.type==='route'),'destination send bypasses router');
-    el.value='';await new Promise(r=>setTimeout(r,1100));
+    check(!!button('Undo routing'),'undo routing remains available');
+    button('Undo routing').click();await wait();check(calls.some(c=>c.type==='undo'),'undo action reaches background');
+    draft('');await new Promise(r=>setTimeout(r,1100));
     draft('resume interview');send.click();await wait();
     check(calls.some(c=>c.type==='route'),'routing re-enabled for next draft');
   } else {
+    document.querySelector('#unrelated-send').click();
+    draft('resume interview');
+    document.querySelector('#unrelated-send').click();
+    check(unrelatedSent===2 && calls.filter(c=>c.type==='route').length===0,'unrelated form and Send button are not intercepted');
     draft('hello there');send.click();check(sent===1,'low confidence sends normally');
     draft('resume');send.click();check(sent===1,'medium confidence holds send');
     check(!!button('Route with context'),'medium suggestion visible');
-    button('Send here').click();await wait();check(sent===2,'send here passes through exactly once');
+    button('Send here').click();await wait();check(sent===2,'send here clicks corresponding visible send button once');
     draft('resume interview');send.click();await wait();
-    check(sent===2 && calls.filter(c=>c.type==='route').length===1,'high confidence routes without sending');
-    check(el.value==='resume interview','source draft preserved');
+    check(sent===2 && calls.filter(c=>c.type==='route').length===1,'high confidence click routes without sending');
+    check(currentValue()==='resume interview','source draft preserved');
     check(calls.find(c=>c.type==='route').text.includes('random matrix'),'recent context included');
-    draft('resume interview');el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',shiftKey:true,bubbles:true,cancelable:true}));await wait();
-    check(calls.filter(c=>c.type==='route').length===1,'shift Enter is not routed');
-    el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',isComposing:true,bubbles:true,cancelable:true}));await wait();
-    check(calls.filter(c=>c.type==='route').length===1,'IME composition is not routed');
-    routeFailure=true;el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));await wait();
-    check(!!button('Send here') && el.value==='resume interview','route failure retains draft and offers recovery');
+    draft('resume interview');enter();await wait();
+    check(calls.filter(c=>c.type==='route').length===2 && sent===2,'high confidence Enter routes without sending');
+    draft('resume interview');enter({shiftKey:true});await wait();
+    check(calls.filter(c=>c.type==='route').length===2 && sent===2,'Shift+Enter remains a native newline');
+    enter({isComposing:true});await wait();
+    check(calls.filter(c=>c.type==='route').length===2 && sent===2,'IME composition Enter remains native');
+    routeFailure=true;draft('resume interview');enter();await wait();
+    check(!!button('Send here') && currentValue()==='resume interview','route failure retains draft and offers recovery');
     changed({settings:{newValue:{...SCR.defaults,enabled:false}}},'local');send.click();check(sent===3,'disabled router sends normally');
   }
   document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';
  }catch(e){document.querySelector('#results').textContent=out.join('\n')+'\nFAIL '+e.stack;}
-});
+})();
 </script></body></html>
