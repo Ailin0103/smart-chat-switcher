@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Content integration fixture</title><style>.composer{min-height:32px;border:1px solid #888}.hidden{display:none}</style></head><body>
-<div data-message-author-role="user">I studied random matrix products.</div>
+<div id="prior-user-message" data-message-author-role="user">I studied random matrix products.</div>
 <main>
   <form id="main-composer-form">
     <div id="modern-composer" class="composer" contenteditable="true" role="textbox" aria-label="Ask ChatGPT"></div>
@@ -40,6 +40,11 @@ if(newChat) {
   document.querySelector('#modern-composer').setAttribute('aria-label','Message');
   document.querySelector('#modern-send').remove();
 }
+if(new URLSearchParams(location.search).has('turnattr')) {
+  const prior=document.querySelector('#prior-user-message');
+  prior.removeAttribute('data-message-author-role');
+  prior.setAttribute('data-turn','user');
+}
 window.chrome = {
  storage:{local:{async get(){return {settings:{...SCR.defaults,projects:SCR.defaults.projects.map(p=>({...p,url:'https://chatgpt.com/c/'+p.id}))}};}},onChanged:{addListener(fn){changed=fn;}}},
  runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};return {ok:true};}}
@@ -56,6 +61,7 @@ void (async()=>{
  const draft=text=>{if(el instanceof HTMLTextAreaElement)el.value=text;else el.innerText=text;el.dispatchEvent(new Event('input',{bubbles:true}));};
  const enter=(options={})=>{const event=new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...options});el.dispatchEvent(event);if(!event.defaultPrevented && !options.shiftKey && !options.isComposing)send.click();return event;};
  const button=label=>[...document.querySelectorAll('div')].flatMap(e=>e.shadowRoot?[...e.shadowRoot.querySelectorAll('button')]:[]).find(b=>b.textContent===label);
+ const status=()=>[...document.querySelectorAll('div')].flatMap(e=>e.shadowRoot?[...e.shadowRoot.querySelectorAll('[role="status"]')]:[]).map(el=>el.textContent).join(' ');
  try {
   if(handoffRecord){
     check(!!button('Insert handoff'),'destination handoff displayed');
@@ -82,7 +88,8 @@ void (async()=>{
     draft('resume interview');send.click();await wait();
     check(sent===2 && calls.filter(c=>c.type==='route').length===1,'high confidence click routes without sending');
     check(currentValue()==='resume interview','source draft preserved');
-    check(calls.find(c=>c.type==='route').text.includes('random matrix'),'recent context included');
+    check(calls.find(c=>c.type==='route').text.includes('I studied random matrix products.'),'prior user message included in handoff');
+    check(status().includes('Included 1 prior user message'),'route confirmation reports captured context count');
     draft('resume interview');enter();await wait();
     check(calls.filter(c=>c.type==='route').length===2 && sent===2,'high confidence Enter routes without sending');
     draft('resume interview');enter({shiftKey:true});await wait();

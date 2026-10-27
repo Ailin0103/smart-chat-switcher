@@ -64,11 +64,19 @@
     if (value(composer()) !== message) { pending = null; hide(); return; }
     busy = true;
     try {
-      const excerpts = [...document.querySelectorAll('[data-message-author-role="user"]')].slice(-3).map(el => el.innerText);
+      const excerpts = [...document.querySelectorAll('[data-message-author-role="user" i], [data-turn="user" i]')]
+        .map(el => (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .slice(-3);
       const text = SCR.handoff(message, excerpts, location.origin + location.pathname, settings.includeContext);
       await rpc({type: 'route', projectId: result.project.id, text});
       pending = null;
-      show('Opened ' + result.project.name, 'Your original draft is still here. Undo is available in the destination tab.', [['Send here instead', sendHere], ['Dismiss', hide]]);
+      const contextStatus = !settings.includeContext
+        ? 'Previous context sharing is off.'
+        : excerpts.length
+          ? 'Included ' + excerpts.length + ' prior user message' + (excerpts.length === 1 ? '' : 's') + '.'
+          : 'No prior user messages were detected; only the current request was handed off.';
+      show('Opened ' + result.project.name, contextStatus + ' Your original draft is still here. Undo is available in the destination tab.', [['Send here instead', sendHere], ['Dismiss', hide]]);
     } catch (e) {
       pending = null;
       show('Could not route', e.message + ' Your draft is still here.', [['Send here', sendHere], ['Dismiss', hide]]);

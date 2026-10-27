@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.5
+
+- Read prior user messages from both `data-message-author-role="user"` and `data-turn="user"` markers.
+- Report the number of prior user-message excerpts included in the source-tab route confirmation, or explain when none were detected or sharing is disabled.
+- Added integration coverage for the alternate user-turn marker and captured handoff context.
+
+## 0.1.4
+
+- Improved extraction of prior user-message text and made the successful route card report how many excerpts were included, or explain when none were detected.
+- Added a browser fixture assertion that prior conversation text is present in the handoff.
+
 ## 0.1.3
 
 - Remembered the last focused visible chat editor in the main page so handoffs can be inserted into a newly started conversation after focus moves to the extension card.
