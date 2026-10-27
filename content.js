@@ -7,9 +7,18 @@
     return style.display !== 'none' && style.visibility === 'visible' && Number(style.opacity) > 0;
   };
   const sendSelector = 'button[data-testid="send-button"], button#composer-submit-button, button[type="submit"][aria-label="Send" i], button[type="submit"][aria-label="Send message" i]';
+  let lastFocusedComposer = null;
+  const isEditor = el => el instanceof HTMLTextAreaElement || el?.matches?.('[contenteditable="true"][role="textbox"]');
+  document.addEventListener('focusin', event => {
+    const el = event.target;
+    if (isEditor(el) && el.closest('main') && visible(el) && !el.disabled) lastFocusedComposer = el;
+  }, true);
   const composer = () => {
     const known = [...document.querySelectorAll('div[contenteditable="true"][role="textbox"][aria-label="Ask ChatGPT" i], #prompt-textarea[contenteditable="true"], textarea#prompt-textarea, textarea[aria-label="Chat with ChatGPT" i][placeholder="Ask ChatGPT" i]')].find(el => visible(el) && !el.disabled);
     if (known) return known;
+    const active = document.activeElement;
+    if (isEditor(active) && active.closest('main') && visible(active) && !active.disabled) return active;
+    if (isEditor(lastFocusedComposer) && lastFocusedComposer.closest('main') && visible(lastFocusedComposer) && !lastFocusedComposer.disabled) return lastFocusedComposer;
     const candidates = [...document.querySelectorAll('main form textarea, main form [contenteditable="true"][role="textbox"]')].filter(el => visible(el) && !el.disabled && [...el.closest('form').querySelectorAll(sendSelector)].some(visible));
     return candidates.length === 1 ? candidates[0] : null;
   };

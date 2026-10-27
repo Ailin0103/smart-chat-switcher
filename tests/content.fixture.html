@@ -35,6 +35,11 @@ if(new URLSearchParams(location.search).has('fallback')) {
   document.querySelector('#modern-composer').setAttribute('aria-label','Message');
   document.querySelector('#modern-send').setAttribute('aria-label','Send message');
 }
+const newChat = new URLSearchParams(location.search).has('newchat');
+if(newChat) {
+  document.querySelector('#modern-composer').setAttribute('aria-label','Message');
+  document.querySelector('#modern-send').remove();
+}
 window.chrome = {
  storage:{local:{async get(){return {settings:{...SCR.defaults,projects:SCR.defaults.projects.map(p=>({...p,url:'https://chatgpt.com/c/'+p.id}))}};}},onChanged:{addListener(fn){changed=fn;}}},
  runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};return {ok:true};}}
@@ -43,7 +48,7 @@ window.chrome = {
 void (async()=>{
  const wait=()=>new Promise(r=>setTimeout(r,30)); await wait();
  const out=[], el=document.querySelector('#modern-composer:not(.hidden)') || document.querySelector('#mobile-composer-prompt') || document.querySelector('#prompt-textarea'), send=document.querySelector('#modern-send:not(.hidden)') || document.querySelector('#legacy-send'); let sent=0, unrelatedSent=0;
- send.addEventListener('click',()=>sent++);
+ send?.addEventListener('click',()=>sent++);
  document.querySelector('#main-composer-form').addEventListener('submit',event=>event.preventDefault());
  document.querySelector('#unrelated-send').addEventListener('click',()=>unrelatedSent++);
  const check=(condition,label)=>{if(!condition)throw Error(label);out.push('PASS '+label);};
@@ -54,10 +59,11 @@ void (async()=>{
  try {
   if(handoffRecord){
     check(!!button('Insert handoff'),'destination handoff displayed');
-    draft('existing draft');button('Insert handoff').click();await wait();
+    el.focus();draft('existing draft');button('Insert handoff').click();await wait();
     check(currentValue()==='existing draft','existing draft never overwritten');
-    draft('');button('Insert handoff').click();await wait();
+    el.focus();draft('');button('Insert handoff').click();await wait();
     check(currentValue()===handoffRecord.text,'handoff inserted through composer input');
+    if(newChat){document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';return;}
     send.click();await wait();check(sent===1 && !calls.some(c=>c.type==='route'),'destination send bypasses router');
     check(!!button('Undo routing'),'undo routing remains available');
     button('Undo routing').click();await wait();check(calls.some(c=>c.type==='undo'),'undo action reaches background');
