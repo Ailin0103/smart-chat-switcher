@@ -29,7 +29,7 @@ Copy the actual URL from your account. These examples are shapes, not usable des
 | Medium | Shows an in-page card with **Route with context**, **Send here**, and **Keep editing**. |
 | Low / already at the saved URL | ChatGPT receives the send normally. |
 
-At the destination, a card shows the complete handoff. Click **Insert handoff**, review the composer, then press ChatGPT's Send button. **Undo routing** closes the extension-created destination tab and returns to the original tab and its draft. Undo is a navigation undo, not a way to retract a message already sent. It is available until the handoff is dismissed, submitted, expires, or the browser session ends.
+At the destination, a card shows the source reference and request for review. Edit the text or choose **Use request only**, then click **Insert reviewed handoff**. This only fills the composer; press ChatGPT's Send button to submit. If you clear the draft before sending, **Reinsert handoff** restores the reviewed text. **Undo routing** closes the extension-created destination tab and returns to the original tab and its draft; it cannot retract a message already sent.
 
 The source tab remains open. Returning to it does not automatically send anything. **Send here instead** explicitly sends the source draft there. Existing drafts at the destination are never overwritten; copy the handoff manually if you want to append it. If insertion is unsupported, the card's text box can be selected and copied.
 
@@ -47,14 +47,14 @@ This is automatic *routing*, followed by user-controlled final sending. It does 
 
 Numbers describe heuristic strength, **not calibrated probabilities**. English keywords use word boundaries; Chinese keywords use substring matching. Keyword frequency does not boost a score. Only active destinations with valid URLs participate. Negation, intent, synonyms, and topic boundaries are not semantically understood. For example, “do not discuss my resume” still matches “resume.” Turn off automatic routing for suggestion-only operation if desired.
 
-Context handoff is deliberately small: an extractive summary made from the last three rendered **user** messages, up to 300 characters each, plus the source URL and the complete current request. It excludes assistant replies and uploaded content. Context sharing can be disabled in settings. The original request is not truncated; handoffs over 30,000 characters are rejected with a recovery card.
+Context handoff is reference-based: it includes the source conversation title, URL, conversation ID when present, and the exact unsent request. It does not copy source history or assume that ChatGPT can access a URL or ID. The destination prompt asks ChatGPT to retrieve the source only if accessible and to state when it cannot. The package is stored temporarily in `chrome.storage.session` for the intended destination tab, written before navigation, and never saved in persistent settings or URLs. Turn off **Include a reference to the source conversation** to send only the request.
 
 ## Privacy and permissions
 
 - Only the `storage` API permission and a content script matching `https://chatgpt.com/*` are declared.
 - Settings and destination mappings use `chrome.storage.local` and remain on the device.
-- Handoff text uses `chrome.storage.session`, keyed by destination tab. It is not put in URLs, persistent local settings, analytics, or an external API.
-- Handoffs become unusable after 30 minutes and are removed on their next lookup, on dismissal/submission, or when the destination closes. Chrome also clears session storage when the browser session ends. Expired entries may remain in session memory until one of those events.
+- The reference handoff package uses `chrome.storage.session`, keyed to the intended destination tab. It contains only source metadata and the unsent request, not copied conversation history.
+- Handoffs expire after 30 minutes and are removed on cancellation or when the destination tab closes. Chrome also clears session storage when the browser session ends.
 - Text inserted into ChatGPT becomes visible to ChatGPT like any normal draft; sending it is your action.
 - No broad `tabs` permission is needed for creating, activating, or closing the extension's destination tab.
 
@@ -77,7 +77,7 @@ Automated logic tests (Node.js 18+):
 node --test tests/*.test.cjs
 ```
 
-Browser integration fixtures: open `tests/content.fixture.html` in Chrome. The page must show **ALL PASSED**. Add `?legacy=1` to exercise the old textarea and send-button markers, `?current=1` for the `Chat with ChatGPT` textarea and `Send message` button, `?fallback=1#destination` for an unfamiliar composer label, `?newchat=1#destination` for inserting into the previously focused new-chat editor without a detectable Send button, or `?turnattr=1` to test the alternate user-turn history marker. Open with only `#destination` for the standard destination flow. The source route confirmation reports how many prior user messages were included, which helps diagnose missing history. These fixtures run the real content script against simulated composers and mocked Chrome APIs; they do not load the extension or connect to ChatGPT.
+Browser integration fixtures: open `tests/content.fixture.html` in Chrome. The page must show **ALL PASSED**. Add `?legacy=1` for old composer markers, `?current=1` for the current labeled textarea, `?fallback=1#destination` for an unfamiliar composer label, or `?newchat=1#destination` for a new-chat editor. Open with only `#destination` for source-reference review and insertion checks. Fixtures verify prompt contents and routing only; they cannot establish whether ChatGPT can retrieve another conversation. See [CONTEXT_REFERENCE_TEST.md](CONTEXT_REFERENCE_TEST.md) for the retrieval evaluation and status.
 
 Manual checks on ChatGPT after loading the extension:
 
@@ -96,7 +96,7 @@ Manual checks on ChatGPT after loading the extension:
 
 ## Compatibility and scope
 
-The implementation uses the rendered ChatGPT page, not backend endpoints. ChatGPT's DOM is not a stable extension API. The composer, send button, and user-message selectors are centralized near their usage in `content.js`; they may require updates after a site redesign. The included browser fixtures and unit tests pass, but live authenticated ChatGPT behavior must be checked in your account after installation.
+The implementation reads page title and URL metadata only; it does not inspect conversation message DOM or call backend endpoints. ChatGPT is not guaranteed to expose one conversation to another. A reference is not proof of retrieval. The included fixtures and unit tests test package formatting and routing, not ChatGPT's cross-conversation retrieval ability.
 
 - Text only: attachments, voice, images, tools, and model selection do not transfer. Recognized attachment markers downgrade automatic routing to a suggestion, but marker detection is best-effort. Use **Send here** for uploads.
 - Only the main composer and normal Enter, send-button click, and containing-form submit paths are covered. Edit-message flows and other send shortcuts are outside this MVP.

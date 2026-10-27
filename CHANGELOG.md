@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.8
+
+- Replaced history copying with a reference-only handoff containing source title, URL, conversation ID when available, and the exact unsent request.
+- Stored the uniquely identified package in `chrome.storage.session` before navigation and kept the existing destination-tab isolation and manual review/submit flow.
+- Explicitly asks the destination not to fabricate source context if the referenced conversation is inaccessible.
+- Removed DOM history extraction and the session conversation buffer. Added reference-format tests and documented that live retrieval accuracy remains unverified without an authenticated account.
+
+## 0.1.6
+
+- Normalized whitespace when verifying inserted handoff text so ChatGPT editor paragraph and line-break rendering does not produce a false insertion failure.
+- Kept full-text and order verification, and added a fixture that converts handoff lines into editor paragraphs.
+
 ## 0.1.5
 
 - Read prior user messages from both `data-message-author-role="user"` and `data-turn="user"` markers.

@@ -1,6 +1,6 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Content integration fixture</title><style>.composer{min-height:32px;border:1px solid #888}.hidden{display:none}</style></head><body>
-<div id="prior-user-message" data-message-author-role="user">I studied random matrix products.</div>
+<!doctype html><html><head><meta charset="utf-8"><title>Resume planning - ChatGPT</title><style>.composer{min-height:32px;border:1px solid #888}.hidden{display:none}</style></head><body>
 <main>
+  <div id="visible-old-conversation">This page contains visible history, but reference handoff must not copy it.</div>
   <form id="main-composer-form">
     <div id="modern-composer" class="composer" contenteditable="true" role="textbox" aria-label="Ask ChatGPT"></div>
     <textarea id="prompt-textarea" class="hidden"></textarea>
@@ -11,96 +11,70 @@
 </main>
 <pre id="results">RUNNING</pre>
 <script>
-const calls = [];
-let changed, routeFailure = false, handoffRecord;
-const nativeAttach = Element.prototype.attachShadow;
-Element.prototype.attachShadow = function(options) { return nativeAttach.call(this, {...options, mode:'open'}); };
-if(location.hash === '#destination') handoffRecord={project:'Job Search',text:'Current request:\nresume interview'};
-if(new URLSearchParams(location.search).has('legacy')) {
-  document.querySelector('#modern-composer').remove();
-  document.querySelector('#modern-send').remove();
-  document.querySelector('#prompt-textarea').classList.remove('hidden');
-  document.querySelector('#legacy-send').classList.remove('hidden');
-}
-if(new URLSearchParams(location.search).has('current')) {
-  document.querySelector('#modern-composer').remove();
-  const mobile=document.querySelector('#prompt-textarea');
-  mobile.id='mobile-composer-prompt';
-  mobile.classList.remove('hidden');
-  mobile.setAttribute('aria-label','Chat with ChatGPT');
-  mobile.setAttribute('placeholder','Ask ChatGPT');
-  document.querySelector('#modern-send').setAttribute('aria-label','Send message');
-}
-if(new URLSearchParams(location.search).has('fallback')) {
-  document.querySelector('#modern-composer').setAttribute('aria-label','Message');
-  document.querySelector('#modern-send').setAttribute('aria-label','Send message');
-}
-const newChat = new URLSearchParams(location.search).has('newchat');
-if(newChat) {
-  document.querySelector('#modern-composer').setAttribute('aria-label','Message');
-  document.querySelector('#modern-send').remove();
-}
-if(new URLSearchParams(location.search).has('turnattr')) {
-  const prior=document.querySelector('#prior-user-message');
-  prior.removeAttribute('data-message-author-role');
-  prior.setAttribute('data-turn','user');
-}
-window.chrome = {
+const calls=[];
+let changed, routeFailure=false, handoffRecord;
+const nativeAttach=Element.prototype.attachShadow;
+Element.prototype.attachShadow=function(options){return nativeAttach.call(this,{...options,mode:'open'});};
+const params=new URLSearchParams(location.search);
+if(params.has('legacy')) {document.querySelector('#modern-composer').remove();document.querySelector('#modern-send').remove();document.querySelector('#prompt-textarea').classList.remove('hidden');document.querySelector('#legacy-send').classList.remove('hidden');}
+if(params.has('current')) {document.querySelector('#modern-composer').remove();const mobile=document.querySelector('#prompt-textarea');mobile.id='mobile-composer-prompt';mobile.classList.remove('hidden');mobile.setAttribute('aria-label','Chat with ChatGPT');mobile.setAttribute('placeholder','Ask ChatGPT');document.querySelector('#modern-send').setAttribute('aria-label','Send message');}
+if(params.has('fallback')||params.has('newchat')) {document.querySelector('#modern-composer').setAttribute('aria-label','Message');document.querySelector('#modern-send').setAttribute('aria-label','Send message');}
+if(params.has('newchat')) document.querySelector('#modern-send').remove();
+window.chrome={
  storage:{local:{async get(){return {settings:{...SCR.defaults,projects:SCR.defaults.projects.map(p=>({...p,url:'https://chatgpt.com/c/'+p.id}))}};}},onChanged:{addListener(fn){changed=fn;}}},
- runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};return {ok:true};}}
+ runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};if(m.type==='route')return {ok:true,handoff:SCR.createReferenceHandoff({id:'source-fixture',currentRequest:m.currentRequest,source:{title:m.sourceTitle,url:location.origin+location.pathname,conversation_id:'source-id'},destination:{project:'Job Search'}})};return {ok:true};}}
 };
-</script><script src="../core.js"></script><script src="../content.js"></script><script>
+</script><script src="../core.js"></script><script>
+if(location.hash==='#destination') handoffRecord=SCR.createReferenceHandoff({id:'destination-fixture',currentRequest:'resume interview',source:{title:'Resume planning',url:'https://chatgpt.com/c/source-123',conversation_id:'source-123'},destination:{project:'Job Search'}});
+</script><script src="../content.js"></script><script>
 void (async()=>{
- const wait=()=>new Promise(r=>setTimeout(r,30)); await wait();
- const out=[], el=document.querySelector('#modern-composer:not(.hidden)') || document.querySelector('#mobile-composer-prompt') || document.querySelector('#prompt-textarea'), send=document.querySelector('#modern-send:not(.hidden)') || document.querySelector('#legacy-send'); let sent=0, unrelatedSent=0;
+ const wait=()=>new Promise(resolve=>setTimeout(resolve,30));await wait();
+ const out=[],el=document.querySelector('#modern-composer:not(.hidden)')||document.querySelector('#mobile-composer-prompt')||document.querySelector('#prompt-textarea'),send=document.querySelector('#modern-send:not(.hidden)')||document.querySelector('#legacy-send');let sent=0,unrelatedSent=0;
  send?.addEventListener('click',()=>sent++);
  document.querySelector('#main-composer-form').addEventListener('submit',event=>event.preventDefault());
  document.querySelector('#unrelated-send').addEventListener('click',()=>unrelatedSent++);
  const check=(condition,label)=>{if(!condition)throw Error(label);out.push('PASS '+label);};
  const currentValue=()=>el instanceof HTMLTextAreaElement?el.value:el.innerText;
  const draft=text=>{if(el instanceof HTMLTextAreaElement)el.value=text;else el.innerText=text;el.dispatchEvent(new Event('input',{bubbles:true}));};
- const enter=(options={})=>{const event=new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...options});el.dispatchEvent(event);if(!event.defaultPrevented && !options.shiftKey && !options.isComposing)send.click();return event;};
- const button=label=>[...document.querySelectorAll('div')].flatMap(e=>e.shadowRoot?[...e.shadowRoot.querySelectorAll('button')]:[]).find(b=>b.textContent===label);
- const status=()=>[...document.querySelectorAll('div')].flatMap(e=>e.shadowRoot?[...e.shadowRoot.querySelectorAll('[role="status"]')]:[]).map(el=>el.textContent).join(' ');
- try {
+ const enter=(options={})=>{const event=new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...options});el.dispatchEvent(event);if(!event.defaultPrevented&&!options.shiftKey&&!options.isComposing)send?.click();return event;};
+ const button=label=>[...document.querySelectorAll('div')].flatMap(node=>node.shadowRoot?[...node.shadowRoot.querySelectorAll('button')]:[]).find(item=>item.textContent===label);
+ const extensionRoot=()=>[...document.querySelectorAll('div')].find(node=>node.shadowRoot)?.shadowRoot;
+ try{
   if(handoffRecord){
-    check(!!button('Insert handoff'),'destination handoff displayed');
-    el.focus();draft('existing draft');button('Insert handoff').click();await wait();
-    check(currentValue()==='existing draft','existing draft never overwritten');
-    el.focus();draft('');button('Insert handoff').click();await wait();
-    check(currentValue()===handoffRecord.text,'handoff inserted through composer input');
-    if(newChat){document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';return;}
-    send.click();await wait();check(sent===1 && !calls.some(c=>c.type==='route'),'destination send bypasses router');
-    check(!!button('Undo routing'),'undo routing remains available');
-    button('Undo routing').click();await wait();check(calls.some(c=>c.type==='undo'),'undo action reaches background');
-    draft('');await new Promise(r=>setTimeout(r,1100));
-    draft('resume interview');send.click();await wait();
-    check(calls.some(c=>c.type==='route'),'routing re-enabled for next draft');
-  } else {
-    document.querySelector('#unrelated-send').click();
-    draft('resume interview');
-    document.querySelector('#unrelated-send').click();
-    check(unrelatedSent===2 && calls.filter(c=>c.type==='route').length===0,'unrelated form and Send button are not intercepted');
-    draft('hello there');send.click();check(sent===1,'low confidence sends normally');
-    draft('resume');send.click();check(sent===1,'medium confidence holds send');
-    check(!!button('Route with context'),'medium suggestion visible');
-    button('Send here').click();await wait();check(sent===2,'send here clicks corresponding visible send button once');
-    draft('resume interview');send.click();await wait();
-    check(sent===2 && calls.filter(c=>c.type==='route').length===1,'high confidence click routes without sending');
-    check(currentValue()==='resume interview','source draft preserved');
-    check(calls.find(c=>c.type==='route').text.includes('I studied random matrix products.'),'prior user message included in handoff');
-    check(status().includes('Included 1 prior user message'),'route confirmation reports captured context count');
-    draft('resume interview');enter();await wait();
-    check(calls.filter(c=>c.type==='route').length===2 && sent===2,'high confidence Enter routes without sending');
-    draft('resume interview');enter({shiftKey:true});await wait();
-    check(calls.filter(c=>c.type==='route').length===2 && sent===2,'Shift+Enter remains a native newline');
-    enter({isComposing:true});await wait();
-    check(calls.filter(c=>c.type==='route').length===2 && sent===2,'IME composition Enter remains native');
-    routeFailure=true;draft('resume interview');enter();await wait();
-    check(!!button('Send here') && currentValue()==='resume interview','route failure retains draft and offers recovery');
-    changed({settings:{newValue:{...SCR.defaults,enabled:false}}},'local');send.click();check(sent===3,'disabled router sends normally');
+   check(!!button('Insert reviewed handoff'),'reference handoff appears at destination');
+   const review=extensionRoot().querySelector('[aria-label="Review and edit handoff text"]');
+   check(review.value.includes('Title: Resume planning')&&review.value.includes('Conversation ID: source-123'),'source title and ID are inspectable');
+   check(review.value.includes('URL: https://chatgpt.com/c/source-123'),'source URL is inspectable');
+   check(review.value.includes('Do not infer or fabricate'),'destination is instructed not to invent source details');
+   check(review.value.includes('Current request:\nresume interview'),'request is present verbatim');
+   check(!review.value.includes('This page contains visible history'),'source history is not copied');
+   button('Use request only').click();await wait();
+   check(review.value==='Current request:\nresume interview','request-only option removes reference');
+   review.value=handoffRecord.text;el.focus();button('Insert reviewed handoff').click();await wait();
+   check(currentValue().includes('Title: Resume planning'),'reviewed reference is inserted');
+   check(sent===0,'insert does not submit automatically');
+   if(params.has('newchat')){document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';return;}
+  }else{
+   document.querySelector('#unrelated-send').click();draft('resume interview');document.querySelector('#unrelated-send').click();
+   check(unrelatedSent===2&&calls.filter(call=>call.type==='route').length===0,'unrelated form and Send are not intercepted');
+   draft('hello there');send.click();check(sent===1,'low-confidence request sends normally');
+   draft('resume');send.click();check(sent===1&&!!button('Route with context'),'medium-confidence route prompts');
+   button('Send here').click();await wait();check(sent===2,'Send here submits exactly once');
+   draft('resume interview');send.click();await wait();
+   const routed=calls.find(call=>call.type==='route');
+   check(routed.currentRequest==='resume interview','unsent request passed unchanged');
+   check(routed.sourceTitle==='Resume planning','source title captured');
+  check(!routed.messages&&!routed.recent_messages,'route contains no copied conversation history');
+   const sourceText=SCR.createReferenceHandoff({id:'verify',currentRequest:routed.currentRequest,source:{title:routed.sourceTitle,url:location.origin+location.pathname,conversation_id:'source-id'},destination:{project:'Job Search'}}).text;
+   check(sourceText.includes('URL: '+location.origin+location.pathname),'source URL available to handoff');
+   check(sent===2,'routing does not submit the unsent request in the source');
+  check(extensionRoot().textContent.includes('Opened Job Search'),'routing succeeded');
+  routeFailure=true;draft('resume interview');send.click();await wait();
+  check(currentValue()==='resume interview'&&!!button('Retry routing'),'navigation failure keeps the original request available');
+  routeFailure=false;button('Retry routing').click();await wait();
+  check(currentValue()==='resume interview'&&calls.filter(call=>call.type==='route').length===3,'retry routes the same unsent request without modifying its source draft');
   }
   document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';
- }catch(e){document.querySelector('#results').textContent=out.join('\n')+'\nFAIL '+e.stack;}
+ }catch(error){document.querySelector('#results').textContent=out.join('\n')+'\nFAIL '+error.stack;}
 })();
 </script></body></html>

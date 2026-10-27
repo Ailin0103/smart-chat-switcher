@@ -45,7 +45,31 @@
     const summary = includeContext ? excerpts.slice(-3).map(s => String(s).replace(/\s+/g, ' ').trim().slice(0, 300)).filter(Boolean).join('\n') : '';
     return (summary ? 'Context excerpts from the previous conversation (background only):\n' + summary + '\nSource: ' + source + '\n\n' : '') + 'Current request:\n' + message;
   }
-  const api = {defaults, safeURL, classify, handoff};
+  const HANDOFF_LIMIT = 30000;
+  function createReferenceHandoff({currentRequest, source, destination, id, referenceEnabled = true}) {
+    if (typeof currentRequest !== 'string' || currentRequest.length > HANDOFF_LIMIT) throw Error('Current request is too large to hand off.');
+    const text = referenceEnabled
+      ? [
+          '[Smart Conversation Router — Context Reference]',
+          '',
+          'I was routed here from another ChatGPT conversation.',
+          '',
+          'Source conversation:',
+          'Title: ' + (source.title || 'Unavailable'),
+          'URL: ' + (source.url || 'Unavailable'),
+          'Conversation ID: ' + (source.conversation_id || 'Unavailable'),
+          '',
+          'Please retrieve relevant context from that source conversation if accessible, especially the most recent discussion, decisions, and unresolved questions.',
+          'If you cannot access the source conversation, explicitly state that limitation. Do not infer or fabricate its contents.',
+          '',
+          'Current request:',
+          currentRequest
+        ].join('\n')
+      : 'Current request:\n' + currentRequest;
+    if (text.length > HANDOFF_LIMIT) throw Error('Handoff is too large. The original request remains in the source composer.');
+    return {version:'1.0', id, source, destination, current_request:currentRequest, reference_enabled:referenceEnabled, text};
+  }
+  const api = {defaults, safeURL, classify, createReferenceHandoff};
   root.SCR = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(globalThis);
