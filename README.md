@@ -1,4 +1,4 @@
-# Smart Context Router · MVP
+# Smart Chat Switcher · MVP
 
 A local Chrome extension that intercepts ChatGPT text drafts at send time and offers the right saved conversation or Project. No build step, API key, backend, or external dependencies.
 
@@ -6,19 +6,17 @@ A local Chrome extension that intercepts ChatGPT text drafts at send time and of
 
 1. Keep this folder on your computer (unzip the download first if needed).
 2. In Chrome, open `chrome://extensions` and enable **Developer mode**.
-3. Click **Load unpacked** and select the `smart-context-router` folder containing `manifest.json`.
+3. Click **Load unpacked** and select the `smart-chat-switcher` folder containing `manifest.json`.
 4. Open the extension popup and select **Manage destinations**.
 5. Add Projects, paste their ChatGPT URLs, enter a purpose and supporting keywords, then select **Save settings**.
 6. Copy the Project discovery prompt from Settings into ChatGPT. Paste its JSON-only proposal into the second Settings box, review the proposal, and apply it to the editor. Save only after reviewing the destinations.
 7. Open or refresh a tab at `https://chatgpt.com` after installing or reloading the extension.
 
-In settings, **Visible ChatGPT Projects** lists Project links discovered in open ChatGPT tabs. Open ChatGPT, make the sidebar and Projects visible, then use **Refresh scan**. Review the generated keyword suggestions, click **Add suggestion**, review the destination entry, and click **Save settings**. Scanning is limited to links currently visible in the page; hidden, collapsed, unloaded, or inaccessible Projects are not discovered. Keyword suggestions are local heuristics, not imported Project metadata.
+No sample Projects are prefilled. Add destinations manually or use the Project discovery prompt to prepare a proposal; enter and verify each destination URL yourself before enabling routing. No Chrome Web Store publishing is needed for local installation.
 
-No sample Projects are prefilled. Add destinations manually or scan visible ChatGPT Projects; nothing routes until a real destination URL and supporting keywords are configured. No Chrome Web Store publishing is needed for local installation.
+No sample Projects are prefilled. The discovery prompt asks ChatGPT to identify recurring workstreams from information genuinely available to it; it does not provide preset Project names, update memory, or activate routing. It asks for keywords in the user's commonly used languages, including natural synonyms and phrases actually used for the topic. The JSON uses the `scr-project-discovery-v1` schema and includes each candidate's status and evidence basis, plus any limitations. An empty `projects` array is valid and leaves settings unchanged.
 
-No sample Projects are prefilled. The discovery prompt asks ChatGPT to identify recurring workstreams from information genuinely available to it; it does not provide preset Project names, update memory, or activate routing. The JSON uses the `scr-project-discovery-v1` schema and includes each candidate's status and evidence basis, plus any limitations. An empty `projects` array is valid and leaves settings unchanged.
-
-Paste the proposal into **Review a discovery proposal**. The extension matches names against configured destinations and visible scanned Projects, uses scanned URLs only, and generates local IDs for new entries. Unmatched candidates remain URL-less drafts; new entries remain inactive until you verify the name/URL and explicitly activate them. Review status, evidence, keywords, limitations, and URL mapping before applying to the editor, then use **Save settings** to persist. Conflicting or unverified URLs are rejected rather than guessed. Existing configured IDs, URLs, and active states are preserved.
+Paste the proposal into **Review a discovery proposal**. The extension matches names against configured destinations; new entries receive local IDs and remain inactive drafts until you verify their names and URLs and explicitly activate them. Review status, evidence, keywords, limitations, and any proposed URL before applying to the editor, then use **Save settings** to persist. Existing configured IDs, URLs, and active states are preserved.
 
 Supported URL shapes:
 

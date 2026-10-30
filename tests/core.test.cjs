@@ -9,6 +9,11 @@ test('high, medium and low English routing', () => {
   assert.equal(classify('resume and interview', list).project.id, 'job');
   assert.equal(classify('CodonBERT training', list).level, 'high');
 });
+test('multilingual Project keywords match messages in the user language', () => {
+  const bilingual = {...list[0], keywords:['resume','CV','简历','求职材料']};
+  assert.equal(classify('帮我修改简历', [bilingual], 'https://chatgpt.com/c/other').level, 'medium');
+  assert.equal(classify('Could you review my CV?', [bilingual], 'https://chatgpt.com/c/other').level, 'medium');
+});
 test('ambiguity downgrades; current context stays; inactive/unconfigured ignored', () => {
   assert.equal(classify('resume for my dissertation', list).level, 'medium');
   assert.equal(classify('resume interview', list, list[0].url).level, 'low');
@@ -49,6 +54,9 @@ test('discovery prompt asks ChatGPT to identify recurring work and returns JSON 
   const prompt = SCR.createActivationPrompt([list[0]], [{name:'Job Searching',url:'https://chatgpt.com/g/g-p-job/project'}]);
   assert.ok(prompt.includes('Please identify my recurring projects and workstreams from the conversation context, saved memory'));
   assert.ok(prompt.includes('Do not ask me to prepare a Project list first.'));
+  assert.ok(prompt.includes('If I use more than one language, include natural keywords in each relevant language'));
+  assert.ok(prompt.includes('the actual terms, synonyms, and informal phrases I use'));
+  assert.ok(prompt.includes('"简历"'));
   assert.ok(prompt.includes('"schema": "scr-project-discovery-v1"'));
   assert.ok(prompt.includes('"supporting_keywords": ["<relevant keyword or phrase>"]'));
   assert.ok(prompt.includes('"status": "confirmed"'));
@@ -61,15 +69,15 @@ test('discovery prompt asks ChatGPT to identify recurring work and returns JSON 
 test('registry import updates a matching configured Project without replacing its URL or active state', () => {
   const current = [{id:'job',name:'Job Search',purpose:'Old purpose',url:'https://chatgpt.com/g/g-p-job/project',keywords:['old'],active:true}];
   const imported = {schema:'scr-project-discovery-v1',limitations:[],projects:[{name:'Job Search',purpose:'Career applications',supporting_keywords:['resume','interview'],url:'',status:'confirmed',basis:'The saved context identifies this Project.'}]};
-  const updated = SCR.validateRegistryImport(imported,current,[]);
+  const updated = SCR.validateRegistryImport(imported,current);
   assert.equal(updated.projects[0].purpose,'Career applications');
   assert.deepEqual(updated.projects[0].keywords,['resume','interview']);
   assert.equal(updated.projects[0].url,current[0].url);
   assert.equal(updated.projects[0].active,true);
-  assert.throws(()=>SCR.validateRegistryImport({...imported,schema:'old-schema'},current,[]),/scr-project-discovery-v1/);
-  assert.throws(()=>SCR.validateRegistryImport({...imported,projects:[{...imported.projects[0],project_id:'unknown'}]},current,[]),/exactly name, purpose/);
-  assert.throws(()=>SCR.validateRegistryImport({...imported,projects:[{...imported.projects[0],url:'https://chatgpt.com/c/x'}]},current,[]),/Invalid ChatGPT Project URL/);
-  assert.throws(()=>SCR.validateRegistryImport({...imported,projects:[{...imported.projects[0],url:'https://chatgpt.com/g/g-p-other/project'}]},current,[]),/not verified by a visible Project scan/);
+  assert.throws(()=>SCR.validateRegistryImport({...imported,schema:'old-schema'},current),/scr-project-discovery-v1/);
+  assert.throws(()=>SCR.validateRegistryImport({...imported,projects:[{...imported.projects[0],project_id:'unknown'}]},current),/exactly name, purpose/);
+  assert.throws(()=>SCR.validateRegistryImport({...imported,projects:[{...imported.projects[0],url:'https://chatgpt.com/c/x'}]},current),/Invalid ChatGPT Project URL/);
+  assert.throws(()=>SCR.validateRegistryImport({...imported,projects:[{...imported.projects[0],url:'https://chatgpt.com/g/g-p-other/project'}]},current),/conflicts with the configured URL/);
 });
 test('route parser accepts exact current protocol only', () => {
   const projects = [list[0]];
@@ -115,26 +123,25 @@ test('default registry has no preset Projects and migration removes only untouch
   assert.deepEqual(migrated.projects.map(project=>project.id),['custom','paper']);
   assert.equal(migrated.projects[1].purpose,'My edited purpose');
 });
-test('discovery import maps scanned URLs, retains unresolved drafts, and handles empty results', () => {
+test('discovery import retains inactive drafts, validates supplied URLs, and handles empty results', () => {
   const proposal={schema:'scr-project-discovery-v1',limitations:[],projects:[{name:'Research Space',purpose:'Recent work on studies',supporting_keywords:['research','paper'],url:'',status:'confirmed',basis:'Found in recent saved context.'}]};
-  const scanned=[{name:'Research Space',url:'https://chatgpt.com/g/g-p-research/project'}];
-  const imported=SCR.validateRegistryImport(proposal,[],scanned);
+  const imported=SCR.validateRegistryImport(proposal,[]);
   assert.equal(imported.hasUpdates,true);
   assert.equal(imported.projects.length,1);
   assert.ok(imported.projects[0].id);
   assert.equal(imported.projects[0].name,'Research Space');
-  assert.equal(imported.projects[0].url,scanned[0].url);
+  assert.equal(imported.projects[0].url,'');
   assert.equal(imported.projects[0].purpose,proposal.projects[0].purpose);
   assert.deepEqual(imported.projects[0].keywords,proposal.projects[0].supporting_keywords);
   assert.equal(imported.projects[0].active,false,'newly discovered projects need explicit user activation');
-  const uncertain=SCR.validateRegistryImport({schema:'scr-project-discovery-v1',limitations:[],projects:[{...proposal.projects[0],status:'needs_confirmation',url:''}]},[],scanned);
-  assert.equal(uncertain.projects[0].url,scanned[0].url);
+  const uncertain=SCR.validateRegistryImport({schema:'scr-project-discovery-v1',limitations:[],projects:[{...proposal.projects[0],status:'needs_confirmation',url:''}]},[]);
+  assert.equal(uncertain.projects[0].url,'');
   assert.equal(uncertain.projects[0].active,false);
-  const unresolved=SCR.validateRegistryImport(proposal,[],[]);
-  assert.equal(unresolved.projects[0].url,'');
-  assert.equal(unresolved.projects[0].active,false);
-  assert.equal(SCR.classify('research paper',unresolved.projects).level,'low');
-  const empty=SCR.validateRegistryImport({schema:'scr-project-discovery-v1',projects:[],limitations:['No project context available.']},[],[]);
+  const withURL=SCR.validateRegistryImport({schema:'scr-project-discovery-v1',limitations:[],projects:[{...proposal.projects[0],url:'https://chatgpt.com/g/g-p-research/project'}]},[]);
+  assert.equal(withURL.projects[0].url,'https://chatgpt.com/g/g-p-research/project');
+  assert.equal(withURL.projects[0].active,false);
+  assert.equal(SCR.classify('research paper',withURL.projects).level,'low');
+  const empty=SCR.validateRegistryImport({schema:'scr-project-discovery-v1',projects:[],limitations:['No project context available.']},[]);
   assert.equal(empty.hasUpdates,false);
   assert.equal(empty.projects.length,0);
 });

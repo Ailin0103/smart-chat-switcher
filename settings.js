@@ -1,6 +1,5 @@
 const $ = s => document.querySelector(s);
 let projects = [];
-let discoveredProjects = [];
 let validatedImport = null;
 function currentRegistryProjects() {
   return projects.filter(project => project.id && project.name.trim()).map(project => ({...project, keywords:[...project.keywords]}));
@@ -8,55 +7,6 @@ function currentRegistryProjects() {
 function refreshActivationPrompt() {
   const prompt = $('#activation-prompt');
   if (prompt) prompt.value = SCR.createActivationPrompt();
-}
-function renderDiscovered() {
-  const container = $('#discovered-projects');
-  container.replaceChildren();
-  const existing = new Set(projects.map(project => project.url).filter(Boolean));
-  const candidates = discoveredProjects.filter(project => !existing.has(project.url));
-  if (!candidates.length) {
-    const empty = document.createElement('small');
-    empty.textContent = discoveredProjects.length ? 'All scanned Projects are already configured.' : 'No visible Projects found yet.';
-    container.append(empty);
-    return;
-  }
-  for (const candidate of candidates) {
-    const row = document.createElement('section'); row.className = 'discovered-project';
-    const name = document.createElement('strong'); name.textContent = candidate.name;
-    const url = document.createElement('small'); url.textContent = candidate.url;
-    const label = document.createElement('label'); label.textContent = 'Suggested keywords (review/edit)';
-    const keywords = document.createElement('input'); keywords.type = 'text'; keywords.value = SCR.suggestKeywords(candidate.name).join(', ');
-    const add = document.createElement('button'); add.type = 'button'; add.textContent = 'Add suggestion';
-    add.onclick = () => {
-      projects.push({id:crypto.randomUUID(), name:candidate.name, purpose:'', url:candidate.url, keywords:keywords.value.split(/[,，]/).map(value=>value.trim()).filter(Boolean), discoveryStatus:'confirmed', discoveryBasis:'Visible ChatGPT Project link confirmed by user.', active:true});
-      draw(); renderDiscovered();
-      $('#status').textContent = 'Added as an unsaved destination. Review it below and save settings.';
-    };
-    row.append(name, url, label, keywords, add); container.append(row);
-  }
-}
-async function refreshDiscovered() {
-  try {
-    const stored = await chrome.storage.session.get(null);
-    const scans = Object.entries(stored).filter(([key, value]) => key.startsWith('visible-projects:') && Date.now() - value.scannedAt < 30 * 60 * 1000);
-    const stale = Object.entries(stored).filter(([key, value]) => key.startsWith('visible-projects:') && Date.now() - value.scannedAt >= 30 * 60 * 1000).map(([key]) => key);
-    if (stale.length) await chrome.storage.session.remove(stale);
-    const byURL = new Map();
-    for (const [, scan] of scans) for (const project of scan.projects) if (SCR.safeURL(project.url)) byURL.set(project.url, project);
-    discoveredProjects = [...byURL.values()];
-    renderDiscovered();
-    refreshActivationPrompt();
-    const lastScannedAt = scans.reduce((latest, [, scan]) => Math.max(latest, scan.scannedAt), 0);
-    $('#project-scan-status').textContent = lastScannedAt
-      ? 'Last scan: ' + new Date(lastScannedAt).toLocaleTimeString() + ' · ' + discoveredProjects.length + ' visible Project(s)'
-      : 'Open ChatGPT with its sidebar visible, then refresh.';
-  } catch (error) { $('#project-scan-status').textContent = 'Could not read the scan: ' + error.message; }
-}
-async function requestProjectScan() {
-  $('#project-scan-status').textContent = 'Scanning open ChatGPT tabs…';
-  await chrome.storage.session.set({requestVisibleProjectScanAt:Date.now()});
-  await new Promise(resolve=>setTimeout(resolve,700));
-  await refreshDiscovered();
 }
 function draw() {
   $('#projects').replaceChildren();
@@ -92,7 +42,6 @@ function draw() {
     }
     $('#projects').append(card);
   }
-  renderDiscovered();
   refreshActivationPrompt();
 }
 function collect() {
@@ -123,7 +72,7 @@ $('#copy-activation').onclick = async () => {
 };
 $('#validate-registry').onclick = () => {
   try {
-    validatedImport = SCR.validateRegistryImport($('#registry-import').value, currentRegistryProjects(), discoveredProjects);
+    validatedImport = SCR.validateRegistryImport($('#registry-import').value, currentRegistryProjects());
     $('#registry-preview').replaceChildren();
     if (!validatedImport.hasUpdates) {
       for (const limitation of validatedImport.limitations) {const row=document.createElement('p');row.textContent=limitation;$('#registry-preview').append(row);}
@@ -138,7 +87,7 @@ $('#validate-registry').onclick = () => {
     }
     for (const limitation of validatedImport.limitations) {const row=document.createElement('small');row.textContent='Limitation: '+limitation;$('#registry-preview').append(row);}
     $('#apply-registry').disabled = false;
-    $('#registry-status').textContent = 'Valid. Review names, status, purpose, keywords, and URL mapping before applying.';
+    $('#registry-status').textContent = 'Valid. Review names, status, purpose, keywords, and URL suggestions before applying.';
   } catch (error) {
     validatedImport = null;
     $('#apply-registry').disabled = true;
@@ -156,8 +105,7 @@ $('#apply-registry').onclick = () => {
   draw();
 };
 $('#registry-import').addEventListener('input', () => {validatedImport = null; $('#apply-registry').disabled = true;});
-$('#refresh-projects').onclick = requestProjectScan;
-chrome.storage.onChanged.addListener((changes, area) => {if (area === 'session' && Object.keys(changes).some(key => key.startsWith('visible-projects:'))) void refreshDiscovered();});
+chrome.storage.onChanged.addListener((changes, area) => {if (area === 'local' && changes.settings) {projects = structuredClone(SCR.migrateSettings(changes.settings.newValue).projects); draw();}});
 (async () => {
   const {settings:stored} = await chrome.storage.local.get('settings');
   const settings = SCR.migrateSettings(stored);
@@ -165,5 +113,4 @@ chrome.storage.onChanged.addListener((changes, area) => {if (area === 'session' 
   for (const key of ['enabled','includeContext']) $('#' + key).checked = settings[key];
   draw();
   if (JSON.stringify(stored) !== JSON.stringify(settings)) await chrome.storage.local.set({settings});
-  await refreshDiscovered();
 })();

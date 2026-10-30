@@ -34,27 +34,6 @@
     }
     return '';
   }
-  let projectScanTimer;
-  function scanVisibleProjects() {
-    const projects = new Map();
-    for (const link of document.querySelectorAll('a[href]')) {
-      const style = getComputedStyle(link);
-      if (!link.getClientRects().length || style.display === 'none' || style.visibility !== 'visible' || link.closest('[aria-hidden="true"]')) continue;
-      const url = SCR.safeURL(new URL(link.getAttribute('href'), location.origin).href);
-      if (!url || !/^\/g\/[\w-]+\/project\/?$/.test(new URL(url).pathname)) continue;
-      const name = (link.innerText || link.getAttribute('aria-label') || link.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
-      if (!name || name.length > 120 || /^new project$/i.test(name)) continue;
-      projects.set(url, {name, url});
-    }
-    void chrome.runtime.sendMessage({type: 'visible-projects', projects: [...projects.values()]}).catch(() => {});
-  }
-  function scheduleProjectScan() {
-    clearTimeout(projectScanTimer);
-    projectScanTimer = setTimeout(scanVisibleProjects, 400);
-  }
-  if (document.documentElement) new MutationObserver(scheduleProjectScan).observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['href','aria-label','title','class','style','aria-hidden']});
-  else document.addEventListener('DOMContentLoaded', scheduleProjectScan, {once: true});
-  scheduleProjectScan();
   const sendButton = () => {
     const form = composer()?.closest('form');
     if (!form) return null;
@@ -72,8 +51,8 @@
     const shadow = host.attachShadow({mode: 'closed'});
     const style = document.createElement('style');
     style.textContent = ':host{all:initial}section{box-sizing:border-box;width:390px;max-width:calc(100vw - 32px);padding:22px;background:#fff;color:#172b2a;border:1px solid #cddbd6;border-radius:18px;box-shadow:0 12px 50px #0003;font:14px/1.5 system-ui}h2{font-size:17px;margin:0 0 8px}p{margin:0 0 14px}button{font:inherit;border:1px solid #baccc5;border-radius:9px;background:#edf5f0;color:#173e31;padding:8px 12px;margin:4px 6px 0 0;cursor:pointer}button:focus-visible,textarea:focus-visible{outline:3px solid #48a784}textarea{box-sizing:border-box;width:100%;height:180px;font:13px/1.5 system-ui;padding:10px;border:1px solid #baccc5;border-radius:8px}small{display:block;color:#547268;margin-bottom:8px}';
-    panel = document.createElement('section'); panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'Smart Context Router');
-    const label = document.createElement('small'); label.textContent = 'SMART CONTEXT ROUTER';
+    panel = document.createElement('section'); panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'Smart Chat Switcher');
+    const label = document.createElement('small'); label.textContent = 'SMART CHAT SWITCHER';
     const heading = document.createElement('h2'); heading.textContent = title;
     const description = document.createElement('p'); description.textContent = body; description.setAttribute('role', 'status');
     panel.append(label, heading, description);
@@ -247,10 +226,9 @@
         ['Insert reviewed handoff', insertReviewed], ['Use current request only', () => { approvedText = 'Current request:\n' + currentRequest; const area = panel?.querySelector('[aria-label="Review and edit handoff text"]'); if (area) area.value = approvedText; }],
         ['Undo routing', () => rpc({type: 'undo'})], ['Dismiss', async () => {await rpc({type: 'clear'}); destination = false; hide();}]
       ], record.text, '', Boolean(record.reference_enabled && !record.source?.title));
-    } catch (e) { console.warn('Smart Context Router:', e.message); }
+    } catch (e) { console.warn('Smart Chat Switcher:', e.message); }
   }
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'session' && changes.requestVisibleProjectScanAt) scheduleProjectScan();
     if (area === 'local' && changes.settings) settings = changes.settings.newValue || SCR.defaults;
   });
   // Keep the extension-created package available until the destination user message is confirmed in history.

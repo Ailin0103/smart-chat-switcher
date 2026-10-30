@@ -4,8 +4,9 @@
 
 - Removed prefilled sample Projects from fresh installs; removes only untouched legacy sample placeholders during migration while preserving customized destinations.
 - Replaced the memory activation prompt with a JSON-only Project discovery prompt based on work ChatGPT can genuinely identify; no preset Projects are included.
-- Added review-first import for `scr-project-discovery-v1`, including limitations, empty-result no-op behavior, evidence/status display, verified visible-Project URL mapping, and inactive drafts for unresolved candidates.
+- Added review-first import for `scr-project-discovery-v1`, including limitations, empty-result no-op behavior, evidence/status display, and inactive drafts for new candidates.
 - Preserves configured IDs, URLs, and active states; new proposals stay inactive until reviewed and explicitly enabled by the user.
+- Removed visible Project scanning; Project destinations are added and verified manually.
 
 ## 0.2.0
 
@@ -16,9 +17,7 @@
 
 ## 0.1.9
 
-- Scanned visible ChatGPT Project links into temporary session storage without adding permissions or reading account APIs.
-- Added a settings review list with editable local keyword suggestions; Projects are added only after explicit user confirmation and saved with the existing Save settings action.
-- Added visibility-scoped Project scanning and keyword suggestion tests.
+- Added local editable keyword suggestions based on user-entered destination names.
 
 ## 0.1.8
 

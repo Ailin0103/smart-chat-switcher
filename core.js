@@ -89,7 +89,7 @@
     };
   }
   function createActivationPrompt() {
-    return `Help me set up Smart Context Router using what you already know about my own ongoing projects.
+    return `Help me set up Smart Chat Switcher using what you already know about my own ongoing projects.
 
 Please identify my recurring projects and workstreams from the conversation context, saved memory, and any other information genuinely available to you. Do not ask me to prepare a Project list first.
 
@@ -101,6 +101,8 @@ For each project you can identify:
 - If you know the ongoing workstream but cannot verify its ChatGPT folder name, use a descriptive name and mark it as "needs_confirmation".
 - Write one concise sentence describing what belongs in that project, specific to my work.
 - Include up to eight supporting keywords or phrases.
+- Choose keywords in the languages I commonly use, based on the available context. If I use more than one language, include natural keywords in each relevant language so the Project can match when I switch languages.
+- Include the actual terms, synonyms, and informal phrases I use when discussing that topic, not only formal labels or the Project name. For example, for a resume workstream, consider terms such as "resume", "CV", "简历", or "求职材料" when they fit my language and usage.
 - Include the exact Project URL only if it is genuinely available. Otherwise leave it empty.
 Focus on ongoing or recurring work. Do not turn every one-off question into a project. Do not invent activity, folder names, or URLs.
 
@@ -137,7 +139,7 @@ Do not update memory or activate routing yet. This step only prepares a proposal
 
 Output JSON only, without Markdown fences or additional commentary.`;
   }
-  function validateRegistryImport(raw, currentProjects, discoveredProjects = []) {
+  function validateRegistryImport(raw, currentProjects) {
     let imported;
     try { imported = typeof raw === 'string' ? JSON.parse(raw) : raw; }
     catch { throw Error('The registry must be valid JSON.'); }
@@ -146,16 +148,10 @@ Output JSON only, without Markdown fences or additional commentary.`;
     }
     if (!imported.projects.length) return {projects:currentProjects, limitations:imported.limitations, hasUpdates:false};
     const currentByName = new Map();
-    const scanByName = new Map();
     for (const project of currentProjects) {
       const key = normalize(project.name);
       if (!currentByName.has(key)) currentByName.set(key, []);
       currentByName.get(key).push(project);
-    }
-    for (const project of discoveredProjects) {
-      const key = normalize(project.name);
-      if (!scanByName.has(key)) scanByName.set(key, []);
-      scanByName.get(key).push(project);
     }
     const seen = new Set();
     const updates = new Map(currentProjects.map(project => [project.id, project]));
@@ -171,34 +167,22 @@ Output JSON only, without Markdown fences or additional commentary.`;
       }
       const keywords = [...new Map(candidate.supporting_keywords.map(keyword => [normalize(keyword), keyword.trim()]).filter(([key, value]) => key && value)).values()];
       const configured = currentByName.get(key) || [];
-      const scanned = scanByName.get(key) || [];
-      if (configured.length > 1 || scanned.length > 1) throw Error('Project name is ambiguous: ' + candidate.name + '. Resolve duplicate names before importing.');
+      if (configured.length > 1) throw Error('Project name is ambiguous: ' + candidate.name + '. Resolve duplicate names before importing.');
       if (configured.length === 1) {
         const current = configured[0];
         const proposedURL = candidate.url ? safeURL(candidate.url) : '';
         if (candidate.url && (!proposedURL || !/^\/g\/[\w-]+\/project\/?$/.test(new URL(proposedURL).pathname))) throw Error('Invalid ChatGPT Project URL for ' + candidate.name + '.');
-        if (proposedURL && proposedURL !== current.url && (scanned.length !== 1 || proposedURL !== scanned[0].url)) throw Error('The proposed URL is not verified by a visible Project scan for ' + candidate.name + '.');
-        if (proposedURL && scanned.length === 1 && proposedURL !== scanned[0].url) throw Error('The proposed URL does not match the scanned Project named ' + candidate.name + '.');
-        const confirmedURL = proposedURL || current.url || (scanned.length === 1 ? scanned[0].url : '');
         if (current.url && proposedURL && current.url !== proposedURL) throw Error('The proposed URL conflicts with the configured URL for ' + candidate.name + '. Review it manually.');
-        updates.set(current.id,{...current, purpose:candidate.purpose, keywords, discoveryStatus:candidate.status, discoveryBasis:candidate.basis, url:confirmedURL, active:current.active});
+        const url = current.url || proposedURL;
+        if (url && currentProjects.some(project => project.id !== current.id && project.url === url)) throw Error('The Project URL is already assigned to another destination.');
+        updates.set(current.id,{...current, purpose:candidate.purpose, keywords, discoveryStatus:candidate.status, discoveryBasis:candidate.basis, url, active:current.url ? current.active : false});
         continue;
       }
       const proposedURL = candidate.url ? safeURL(candidate.url) : '';
       if (candidate.url && (!proposedURL || !/^\/g\/[\w-]+\/project\/?$/.test(new URL(proposedURL).pathname))) throw Error('The supplied URL is not a valid ChatGPT Project URL for ' + candidate.name + '.');
-      if (scanned.length > 1) throw Error('Project name is ambiguous: ' + candidate.name + '. Resolve duplicate visible names before importing.');
-      const scannedProject = scanned[0];
-      if (proposedURL && scannedProject && proposedURL !== scannedProject.url) throw Error('The supplied URL does not match the scanned Project named ' + candidate.name + '.');
-      if (proposedURL && !scannedProject) throw Error('The supplied URL is not verified by a visible Project scan for ' + candidate.name + '.');
-      const resolvedURL = scannedProject?.url || '';
-      const existingURL = resolvedURL && currentProjects.find(project => project.url === resolvedURL);
-      if (existingURL && scannedProject) {
-        if (normalize(existingURL.name) !== key) throw Error('The scanned Project URL is already assigned to a differently named Project: ' + existingURL.name + '.');
-        updates.set(existingURL.id,{...existingURL,purpose:candidate.purpose,keywords,discoveryStatus:candidate.status,discoveryBasis:candidate.basis,active:existingURL.active});
-        continue;
-      }
+      if (proposedURL && currentProjects.some(project => project.url === proposedURL)) throw Error('The Project URL is already assigned to another destination.');
       const id = root.crypto?.randomUUID?.() || 'project-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,10);
-      added.push({id,name:candidate.name,purpose:candidate.purpose,url:resolvedURL,keywords,discoveryStatus:candidate.status,discoveryBasis:candidate.basis,active:false});
+      added.push({id,name:candidate.name,purpose:candidate.purpose,url:proposedURL,keywords,discoveryStatus:candidate.status,discoveryBasis:candidate.basis,active:false});
     }
     if (!seen.size) return {projects:currentProjects, limitations:imported.limitations, hasUpdates:false};
     return {projects:[...currentProjects.map(project => updates.get(project.id)),...added],limitations:imported.limitations,hasUpdates:true};

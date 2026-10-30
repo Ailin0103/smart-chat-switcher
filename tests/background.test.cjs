@@ -104,27 +104,20 @@ test('English UI onboarding is discovery-only and contains no memory activation 
   const content=fs.readFileSync(require.resolve('../content.js'),'utf8');
   assert.match(html,/Project discovery prompt/);
   assert.match(html,/Copy Project discovery prompt/);
+  assert.match(html,/edit the prompt after pasting it into ChatGPT/);
+  assert.match(html,/keywords you use most/);
+  assert.match(html,/id="activation-prompt"[^>]*readonly/);
   assert.match(html,/Review a discovery proposal/);
   assert.doesNotMatch(html,/memory update|finish setup|memory-status/i);
   assert.match(script,/Discovery prompt copied\./);
   assert.doesNotMatch(script,/memory-status|finish-setup|Memory is managed by ChatGPT/);
   assert.match(content,/Source conversation title \(optional\)/);
 });
-test('visible Project scans are validated and isolated by source tab',async()=>{
-  const s=setup();
-  const result=await s.send({type:'visible-projects',projects:[
-    {name:'  Job Searching  ',url:'https://chatgpt.com/g/g-p-job/project'},
-    {name:'External',url:'https://evil.example/g/x/project'},
-    {name:'Conversation',url:'https://chatgpt.com/c/chat-1'}
-  ]},7);
-  assert.equal(result.ok,true);
-  assert.deepEqual(JSON.parse(JSON.stringify(s.records['visible-projects:7'].projects)),[{name:'Job Searching',url:'https://chatgpt.com/g/g-p-job/project'}]);
-  assert.equal(s.records['visible-projects:1'],undefined);
-});
 test('registry apply replaces the editor with validated existing and newly matched Projects',async()=>{
   const fs=require('node:fs');
   const script=fs.readFileSync(require.resolve('../settings.js'),'utf8');
-  assert.match(script,/validatedImport = SCR\.validateRegistryImport\([\s\S]*currentRegistryProjects\(\), discoveredProjects\)/);
+  assert.match(script,/validatedImport = SCR\.validateRegistryImport\([\s\S]*currentRegistryProjects\(\)\)/);
+  assert.doesNotMatch(script,/discoveredProjects|refresh-projects|requestProjectScan/);
   assert.match(script,/projects = validatedImport\.projects;/);
   assert.match(script,/Updates applied to the editor only\. Review them and click Save settings to store\./);
 });

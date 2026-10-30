@@ -3,17 +3,18 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Smart Context Router — Settings</title>
+	<title>Smart Chat Switcher — Settings</title>
 	<link rel="stylesheet" href="ui.css">
 </head>
 <body>
 	<main>
-		<div class="eyebrow">SMART CONTEXT ROUTER / SETTINGS</div>
+				<div class="eyebrow">SMART CHAT SWITCHER / SETTINGS</div>
 		<h1>Give each thought a destination.</h1>
 		<p>Save a few ChatGPT conversations or Project URLs. Matching runs locally when you press Send.</p>
 		<section class="card">
 			<h2>Project discovery prompt</h2>
 			<p>Ask ChatGPT to identify your recurring workstreams. Review its JSON proposal below before changing any settings.</p>
+			<p>You can edit the prompt after pasting it into ChatGPT. Add details about your projects and the keywords you use most, including terms in your usual languages, to help Smart Chat Switcher match future chats more accurately.</p>
 			<textarea id="activation-prompt" aria-label="Project discovery prompt" readonly></textarea>
 			<div class="actions"><button id="copy-activation" type="button">Copy Project discovery prompt</button></div>
 			<p id="prompt-status" role="status" aria-live="polite"></p>
@@ -30,12 +31,6 @@
 			<label><input id="enabled" type="checkbox"> Enable routing</label>
 			<label><input id="includeContext" type="checkbox"> Include the source conversation title in the routed request</label>
 			<small>All destination changes require your confirmation. Low-confidence messages send normally.</small>
-		</section>
-		<section class="card">
-			<div class="row"><h2>Visible ChatGPT Projects</h2><button id="refresh-projects" type="button">Refresh scan</button></div>
-			<p id="project-scan-status" role="status">Open ChatGPT with its sidebar visible, then refresh.</p>
-			<div id="discovered-projects"></div>
-			<small>Only Projects currently visible in an open ChatGPT tab are detected. Review names and keyword suggestions before adding.</small>
 		</section>
 		<div id="projects"></div>
 		<div class="actions"><button id="add" type="button">+ Add destination</button><button class="primary" id="save" type="button">Save settings</button></div>

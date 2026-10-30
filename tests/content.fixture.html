@@ -1,6 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Resume planning - ChatGPT</title><style>.composer{min-height:32px;border:1px solid #888}.hidden{display:none}</style></head><body>
 <main>
-  <nav aria-label="Projects"><a href="https://chatgpt.com/g/g-p-alpha/project">Job Searching</a><a href="https://chatgpt.com/g/g-p-hidden/project" style="display:none">Hidden Project</a></nav>
   <div id="visible-old-conversation">This page contains visible history, but reference handoff must not copy it.</div>
   <form id="main-composer-form">
     <div id="modern-composer" class="composer" contenteditable="true" role="textbox" aria-label="Ask ChatGPT"></div>
@@ -13,7 +12,6 @@
 <pre id="results">RUNNING</pre>
 <script>
 const calls=[];
-const sessionData={};
 let changed, routeFailure=false, handoffRecord;
 const nativeAttach=Element.prototype.attachShadow;
 Element.prototype.attachShadow=function(options){return nativeAttach.call(this,{...options,mode:'open'});};
@@ -24,8 +22,8 @@ if(params.has('current')) {document.querySelector('#modern-composer').remove();c
 if(params.has('fallback')||params.has('newchat')) {document.querySelector('#modern-composer').setAttribute('aria-label','Message');document.querySelector('#modern-send').setAttribute('aria-label','Send message');}
 if(params.has('newchat')) document.querySelector('#modern-send').remove();
 window.chrome={
- storage:{local:{async get(){return {settings:{...SCR.defaults,projects:[{id:'job',name:'Job Search',purpose:'Career applications',keywords:['resume','cover letter','job search','interview'],url:'https://chatgpt.com/c/job',active:true}]}};}},session:{async get(keys){return Object.fromEntries(keys.map(key=>[key,sessionData[key]]));},async set(values){Object.assign(sessionData,values);}},onChanged:{addListener(fn){changed=fn;}}},
- runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};if(m.type==='visible-projects'){sessionData['visible-projects:1']={projects:m.projects,scannedAt:Date.now()};return {ok:true,count:m.projects.length};}if(m.type==='route')return {ok:true,handoff:SCR.createReferenceHandoff({id:'source-fixture',currentRequest:m.currentRequest,source:{title:m.sourceTitle,url:location.origin+location.pathname,conversation_id:'source-id'},destination:{project:'Job Search'}})};return {ok:true};}}
+ storage:{local:{async get(){return {settings:{...SCR.defaults,projects:[{id:'job',name:'Job Search',purpose:'Career applications',keywords:['resume','cover letter','job search','interview'],url:'https://chatgpt.com/c/job',active:true}]}};}},onChanged:{addListener(fn){changed=fn;}}},
+ runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};if(m.type==='route')return {ok:true,handoff:SCR.createReferenceHandoff({id:'source-fixture',currentRequest:m.currentRequest,source:{title:m.sourceTitle,url:location.origin+location.pathname,conversation_id:'source-id'},destination:{project:'Job Search'}})};return {ok:true};}}
 };
 </script><script src="../core.js"></script><script>
 if(location.hash==='#destination') handoffRecord=SCR.createReferenceHandoff({id:'destination-fixture',currentRequest:'resume interview',source:{title:'Resume planning',url:'https://chatgpt.com/c/source-123',conversation_id:'source-123'},destination:{project:'Job Search'}});
@@ -92,9 +90,7 @@ void (async()=>{
    check(sent===0,'insert does not submit automatically');
    if(params.has('newchat')){document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';return;}
   }else{
-    await new Promise(resolve=>setTimeout(resolve,500));
-    check(sessionData['visible-projects:1']?.projects.length===1,'only visible ChatGPT Project link is scanned');
-    check(sessionData['visible-projects:1'].projects[0].name==='Job Searching'&&sessionData['visible-projects:1'].projects[0].url==='https://chatgpt.com/g/g-p-alpha/project','visible Project name and URL captured');
+    check(!calls.some(call=>call.type==='visible-projects'),'content script does not scan Project links');
    document.querySelector('#unrelated-send').click();draft('resume interview');document.querySelector('#unrelated-send').click();
    check(unrelatedSent===2&&calls.filter(call=>call.type==='route').length===0,'unrelated form and Send are not intercepted');
    draft('hello there');send.click();check(sent===1,'low-confidence request sends normally');
