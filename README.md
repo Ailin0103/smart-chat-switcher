@@ -7,11 +7,18 @@ A local Chrome extension that intercepts ChatGPT text drafts at send time and of
 1. Keep this folder on your computer (unzip the download first if needed).
 2. In Chrome, open `chrome://extensions` and enable **Developer mode**.
 3. Click **Load unpacked** and select the `smart-context-router` folder containing `manifest.json`.
-4. Open the extension popup → **Manage destinations**.
-5. Paste your own ChatGPT conversation or Project URLs into the sample destinations you want to use. Click **Save settings**.
-6. Open or refresh a tab at `https://chatgpt.com` after installing or reloading the extension.
+4. Open the extension popup and select **Manage destinations**.
+5. Add Projects, paste their ChatGPT URLs, enter a purpose and supporting keywords, then select **Save settings**.
+6. Copy the Project discovery prompt from Settings into ChatGPT. Paste its JSON-only proposal into the second Settings box, review the proposal, and apply it to the editor. Save only after reviewing the destinations.
+7. Open or refresh a tab at `https://chatgpt.com` after installing or reloading the extension.
 
-Sample destinations: Job Search, Paper 2, CodonBERT, Chubby Group, Dissertation. Their URLs are intentionally blank; nothing routes until you configure real destinations. Add, remove, rename, or deactivate them in settings. No Chrome Web Store publishing is needed for local installation.
+In settings, **Visible ChatGPT Projects** lists Project links discovered in open ChatGPT tabs. Open ChatGPT, make the sidebar and Projects visible, then use **Refresh scan**. Review the generated keyword suggestions, click **Add suggestion**, review the destination entry, and click **Save settings**. Scanning is limited to links currently visible in the page; hidden, collapsed, unloaded, or inaccessible Projects are not discovered. Keyword suggestions are local heuristics, not imported Project metadata.
+
+No sample Projects are prefilled. Add destinations manually or scan visible ChatGPT Projects; nothing routes until a real destination URL and supporting keywords are configured. No Chrome Web Store publishing is needed for local installation.
+
+No sample Projects are prefilled. The discovery prompt asks ChatGPT to identify recurring workstreams from information genuinely available to it; it does not provide preset Project names, update memory, or activate routing. The JSON uses the `scr-project-discovery-v1` schema and includes each candidate's status and evidence basis, plus any limitations. An empty `projects` array is valid and leaves settings unchanged.
+
+Paste the proposal into **Review a discovery proposal**. The extension matches names against configured destinations and visible scanned Projects, uses scanned URLs only, and generates local IDs for new entries. Unmatched candidates remain URL-less drafts; new entries remain inactive until you verify the name/URL and explicitly activate them. Review status, evidence, keywords, limitations, and URL mapping before applying to the editor, then use **Save settings** to persist. Conflicting or unverified URLs are rejected rather than guessed. Existing configured IDs, URLs, and active states are preserved.
 
 Supported URL shapes:
 
@@ -25,35 +32,35 @@ Copy the actual URL from your account. These examples are shapes, not usable des
 
 | Match | Behavior |
 | --- | --- |
-| High | Opens the destination in a new foreground tab, preserving your original draft. |
+| High | Shows a confirmation card. Confirming opens the destination in a new foreground tab and preserves your original draft. |
 | Medium | Shows an in-page card with **Route with context**, **Send here**, and **Keep editing**. |
 | Low / already at the saved URL | ChatGPT receives the send normally. |
 
-At the destination, a card shows the source reference and request for review. Edit the text or choose **Use request only**, then click **Insert reviewed handoff**. This only fills the composer; press ChatGPT's Send button to submit. If you clear the draft before sending, **Reinsert handoff** restores the reviewed text. **Undo routing** closes the extension-created destination tab and returns to the original tab and its draft; it cannot retract a message already sent.
+Every switch requires your confirmation. At the destination, a card shows the source conversation title and current request for review. The model-facing handoff does not include a URL, ID, summary, or source messages. If the title is unavailable, enter it or choose **Use current request only**. Click **Insert reviewed handoff** to fill the composer, then press ChatGPT's Send button to submit. **Undo routing** closes the extension-created destination tab and returns to the original tab and its draft.
 
 The source tab remains open. Returning to it does not automatically send anything. **Send here instead** explicitly sends the source draft there. Existing drafts at the destination are never overwritten; copy the handoff manually if you want to append it. If insertion is unsupported, the card's text box can be selected and copied.
 
-This is automatic *routing*, followed by user-controlled final sending. It does not move chat history, create native folders, or automatically post the message in the destination. It does not promise that ChatGPT will retrieve any particular Project memory; it carries explicit text context instead.
+This is user-confirmed routing followed by user-controlled final sending. It does not move chat history, create native folders, or automatically post the message in the destination. The model-facing handoff contains the source title and current request only; it does not include copied context or promise access to another conversation.
 
 ## Local matcher
 
 `core.js` exposes `classify(message, projects, currentURL)` as the replaceable classifier boundary.
 
-- Exact project-name match or two distinct configured keyword matches, without competing project hits → high (0.95).
+- Exact Project-name match or two distinct configured keyword matches, without competing Project hits → high (0.95).
 - One keyword match → medium (0.75).
 - Any competing destination hits → medium (0.70).
 - No match → low.
 - The highest-scoring destination's exact saved URL matches the current page → stay.
 
-Numbers describe heuristic strength, **not calibrated probabilities**. English keywords use word boundaries; Chinese keywords use substring matching. Keyword frequency does not boost a score. Only active destinations with valid URLs participate. Negation, intent, synonyms, and topic boundaries are not semantically understood. For example, “do not discuss my resume” still matches “resume.” Turn off automatic routing for suggestion-only operation if desired.
+Numbers describe heuristic strength, **not calibrated probabilities**. English keywords use word boundaries. Keyword frequency does not boost a score. Only active, confirmed destinations with valid URLs participate. The local matcher does not reason about purpose, negation, quotations, or topic shifts; it only creates a confirmation suggestion. For example, the local matcher may still match “do not discuss my resume” because it contains “resume.” Assistant-generated `scr-route` suggestions are checked against the exact protocol and require user confirmation.
 
-Context handoff is reference-based: it includes the source conversation title, URL, conversation ID when present, and the exact unsent request. It does not copy source history or assume that ChatGPT can access a URL or ID. The destination prompt asks ChatGPT to retrieve the source only if accessible and to state when it cannot. The package is stored temporarily in `chrome.storage.session` for the intended destination tab, written before navigation, and never saved in persistent settings or URLs. Turn off **Include a reference to the source conversation** to send only the request.
+Context handoff is title-only: it includes the original conversation title when available and the exact unsent request. It does not copy source history or send a URL, conversation ID, or summary to the model. If the title is unavailable, the user can enter one at the destination or continue with the request only. Internal source tab/URL data is retained only for navigation and Undo.
 
 ## Privacy and permissions
 
 - Only the `storage` API permission and a content script matching `https://chatgpt.com/*` are declared.
 - Settings and destination mappings use `chrome.storage.local` and remain on the device.
-- The reference handoff package uses `chrome.storage.session`, keyed to the intended destination tab. It contains only source metadata and the unsent request, not copied conversation history.
+- The title-only handoff package uses `chrome.storage.session`, keyed to the intended destination tab. It contains no source URL, ID, summary, or copied conversation history.
 - Handoffs expire after 30 minutes and are removed on cancellation or when the destination tab closes. Chrome also clears session storage when the browser session ends.
 - Text inserted into ChatGPT becomes visible to ChatGPT like any normal draft; sending it is your action.
 - No broad `tabs` permission is needed for creating, activating, or closing the extension's destination tab.
@@ -61,7 +68,7 @@ Context handoff is reference-based: it includes the source conversation title, U
 ## Files
 
 - `manifest.json`: Manifest V3 definition.
-- `core.js`: sample settings, URL validation, classifier, handoff builder.
+- `core.js`: empty defaults, URL validation, classifier, discovery importer, handoff builder.
 - `content.js`: send interception, shadow-DOM cards, insertion, recovery.
 - `background.js`: validates routes, opens tabs, stores handoffs, handles Undo.
 - `popup.*`, `settings.*`, `ui.css`: controls and editable destinations.
@@ -77,28 +84,28 @@ Automated logic tests (Node.js 18+):
 node --test tests/*.test.cjs
 ```
 
-Browser integration fixtures: open `tests/content.fixture.html` in Chrome. The page must show **ALL PASSED**. Add `?legacy=1` for old composer markers, `?current=1` for the current labeled textarea, `?fallback=1#destination` for an unfamiliar composer label, or `?newchat=1#destination` for a new-chat editor. Open with only `#destination` for source-reference review and insertion checks. Fixtures verify prompt contents and routing only; they cannot establish whether ChatGPT can retrieve another conversation. See [CONTEXT_REFERENCE_TEST.md](CONTEXT_REFERENCE_TEST.md) for the retrieval evaluation and status.
+Browser integration fixtures: open `tests/content.fixture.html` in Chrome. The page must show **ALL PASSED**. Add `?legacy=1` for old composer markers, `?current=1` for the current labeled textarea, `?fallback=1#destination` for an unfamiliar composer label, or `?newchat=1#destination` for a new-chat editor. Open with only `#destination` for title-only handoff review and insertion checks.
 
 Manual checks on ChatGPT after loading the extension:
 
-1. Configure Job Search and Paper 2 with two different real saved URLs. Start from a third conversation.
-2. Send `Help me rewrite my resume for an interview`. Expect a new destination tab, with the original draft unsent.
+1. Add two real destinations with different saved URLs. Start from a third conversation.
+2. Send `Help me rewrite my resume for an interview`. Expect a confirmation card. Confirm it to open the destination tab; the original draft remains unsent.
 3. Click **Undo routing**. Expect the original tab and intact draft.
 4. Repeat, insert the handoff, review, and send. Expect one message only. The next draft should be classified normally.
 5. Send `Improve my resume`. Expect a medium-confidence card. Click **Send here**, and check it sends once.
-6. Send `Use my random matrix work in my resume`. Expect a suggestion rather than an automatic redirect because two destinations match.
+6. Send `Use my random matrix work in my resume`. Expect a local confirmation suggestion because multiple destinations match.
 7. Send `What is 2 + 2?`. Expect normal sending without a card.
 8. In the saved Job Search conversation, send `resume interview`. Expect no redirect to itself.
 9. Verify Shift+Enter creates a newline and composing Chinese text does not trigger premature routing.
-10. Disable routing in the popup and verify sends are untouched. Disable automatic routing in settings and verify high matches become suggestions.
+10. Disable routing in the popup and verify sends are untouched. Verify every route suggestion requires confirmation; no confidence level switches automatically.
 11. With an existing destination draft, try insertion: it should refuse to overwrite it. Check the handoff copy fallback.
 12. Test a destination requiring sign-in/access. Return to the preserved source tab if the destination is unavailable; no message should have been posted by the extension.
 
 ## Compatibility and scope
 
-The implementation reads page title and URL metadata only; it does not inspect conversation message DOM or call backend endpoints. ChatGPT is not guaranteed to expose one conversation to another. A reference is not proof of retrieval. The included fixtures and unit tests test package formatting and routing, not ChatGPT's cross-conversation retrieval ability.
+The implementation reads page title and URL metadata internally, but the model-facing handoff contains only the title and current request. It does not inspect source conversation messages or call backend endpoints.
 
-- Text only: attachments, voice, images, tools, and model selection do not transfer. Recognized attachment markers downgrade automatic routing to a suggestion, but marker detection is best-effort. Use **Send here** for uploads.
+- Text only: attachments, voice, images, tools, and model selection do not transfer. Recognized attachment markers are best-effort; review them before confirming a route. Use **Send here** for uploads.
 - Only the main composer and normal Enter, send-button click, and containing-form submit paths are covered. Edit-message flows and other send shortcuts are outside this MVP.
 - Before settings load, or if the extension is unavailable, normal ChatGPT sending continues. A recognized route failure leaves the draft in place with a recovery card.
 - Exact URL equality prevents routing to the same saved conversation. The MVP does not infer native Project membership from arbitrary conversation URLs.

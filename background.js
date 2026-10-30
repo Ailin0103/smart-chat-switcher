@@ -1,20 +1,32 @@
 importScripts('core.js');
 const PREFIX = 'handoff:';
 const TTL = 30 * 60 * 1000;
+const PROJECT_SCAN_PREFIX = 'visible-projects:';
 chrome.runtime.onInstalled.addListener(async () => {
   const sessionItems = await chrome.storage.session.get(null);
   const oldContextKeys = Object.keys(sessionItems).filter(key => key.startsWith('context:'));
   if (oldContextKeys.length) await chrome.storage.session.remove(oldContextKeys);
   const {settings} = await chrome.storage.local.get('settings');
-  if (!settings) await chrome.storage.local.set({settings: SCR.defaults});
+  await chrome.storage.local.set({settings: SCR.migrateSettings(settings)});
 });
-chrome.tabs.onRemoved.addListener(id => chrome.storage.session.remove(PREFIX + id));
+chrome.tabs.onRemoved.addListener(id => chrome.storage.session.remove([PREFIX + id, PROJECT_SCAN_PREFIX + id]));
 function conversationId(url) { return url.match(/\/c\/([\w-]+)/)?.[1] || null; }
 async function handle(m, sender) {
   if (!sender.tab || !sender.url?.startsWith('https://chatgpt.com/')) throw Error('Unsupported sender');
   const key = PREFIX + sender.tab.id;
+  if (m.type === 'visible-projects') {
+    if (!Array.isArray(m.projects)) throw Error('Invalid Project scan');
+    const projects = [...new Map(m.projects.filter(item => item && typeof item.name === 'string' && item.name.trim() && typeof item.url === 'string')
+      .map(item => ({name:item.name.trim().slice(0,120),url:SCR.safeURL(item.url)}))
+      .filter(item => item.url && /^\/g\/[\w-]+\/project\/?$/.test(new URL(item.url).pathname))
+      .map(item => [item.url,item])).values()];
+    await chrome.storage.session.set({[PROJECT_SCAN_PREFIX + sender.tab.id]: {projects, scannedAt:Date.now()}});
+    return {ok:true, count:projects.length};
+  }
   if (m.type === 'route') {
-    const {settings = SCR.defaults} = await chrome.storage.local.get('settings');
+    const stored = await chrome.storage.local.get('settings');
+    const settings = SCR.migrateSettings(stored.settings);
+    if (JSON.stringify(stored.settings) !== JSON.stringify(settings)) await chrome.storage.local.set({settings});
     const project = settings.projects.find(p => p.id === m.projectId && p.active);
     const url = SCR.safeURL(project?.url);
     if (!settings.enabled || !url || typeof m.currentRequest !== 'string') throw Error('Invalid route');

@@ -27,9 +27,34 @@
   const normalizeDraft = text => String(text).replace(/[\u00a0\u2007\u202f]/g, ' ').replace(/\s+/g, ' ').trim();
   function sourceTitle() {
     const pageTitle = document.title.trim().replace(/\s*(?:[-|·])\s*ChatGPT\s*$/i, '').trim();
-    if (pageTitle && !/^ChatGPT$/i.test(pageTitle)) return pageTitle;
-    return document.querySelector('a[aria-current="page"]')?.innerText?.trim() || '';
+    if (pageTitle && !/^(?:ChatGPT|New chat)$/i.test(pageTitle)) return pageTitle;
+    const active = document.querySelector('a[aria-current="page"][href]');
+    if (active && new URL(active.href).pathname === location.pathname && /\/c\/|\/g\/[^/]+\/c\//.test(location.pathname)) {
+      return (active.innerText || active.getAttribute('aria-label') || '').trim();
+    }
+    return '';
   }
+  let projectScanTimer;
+  function scanVisibleProjects() {
+    const projects = new Map();
+    for (const link of document.querySelectorAll('a[href]')) {
+      const style = getComputedStyle(link);
+      if (!link.getClientRects().length || style.display === 'none' || style.visibility !== 'visible' || link.closest('[aria-hidden="true"]')) continue;
+      const url = SCR.safeURL(new URL(link.getAttribute('href'), location.origin).href);
+      if (!url || !/^\/g\/[\w-]+\/project\/?$/.test(new URL(url).pathname)) continue;
+      const name = (link.innerText || link.getAttribute('aria-label') || link.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
+      if (!name || name.length > 120 || /^new project$/i.test(name)) continue;
+      projects.set(url, {name, url});
+    }
+    void chrome.runtime.sendMessage({type: 'visible-projects', projects: [...projects.values()]}).catch(() => {});
+  }
+  function scheduleProjectScan() {
+    clearTimeout(projectScanTimer);
+    projectScanTimer = setTimeout(scanVisibleProjects, 400);
+  }
+  if (document.documentElement) new MutationObserver(scheduleProjectScan).observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['href','aria-label','title','class','style','aria-hidden']});
+  else document.addEventListener('DOMContentLoaded', scheduleProjectScan, {once: true});
+  scheduleProjectScan();
   const sendButton = () => {
     const form = composer()?.closest('form');
     if (!form) return null;
@@ -41,7 +66,7 @@
     return result;
   };
   function hide() { host?.remove(); host = panel = null; }
-  function show(title, body, actions = [], text) {
+  function show(title, body, actions = [], text, sourceTitleValue, requestTitleEntry = false) {
     hide(); host = document.createElement('div');
     host.style.cssText = 'position:fixed;bottom:100px;right:24px;z-index:2147483647;max-width:calc(100vw - 32px)';
     const shadow = host.attachShadow({mode: 'closed'});
@@ -52,6 +77,11 @@
     const heading = document.createElement('h2'); heading.textContent = title;
     const description = document.createElement('p'); description.textContent = body; description.setAttribute('role', 'status');
     panel.append(label, heading, description);
+    if (requestTitleEntry) {
+      const sourceLabel = document.createElement('label'); sourceLabel.textContent = 'Source conversation title (optional)';
+      const sourceInput = document.createElement('input'); sourceInput.type = 'text'; sourceInput.value = sourceTitleValue || ''; sourceInput.setAttribute('aria-label', 'Source conversation title');
+      sourceLabel.append(sourceInput); panel.append(sourceLabel);
+    }
     if (text !== undefined) { const area = document.createElement('textarea'); area.value = text; area.setAttribute('aria-label', 'Review and edit handoff text'); panel.append(area); }
     for (const [name, fn] of actions) {
       const button = document.createElement('button'); button.textContent = name;
@@ -67,17 +97,18 @@
     bypass = true; button.click();
     setTimeout(() => { bypass = false; }, 0);
   }
-  async function route(result, message) {
-    if (rawValue(composer()) !== message) { pending = null; hide(); return; }
+  async function route(result, message, {fromAssistantSuggestion = false} = {}) {
+    if (!fromAssistantSuggestion && rawValue(composer()) !== message) { pending = null; hide(); return; }
     busy = true;
     try {
-      await rpc({type: 'route', projectId: result.project.id, currentRequest: message, sourceTitle: sourceTitle()});
+          await rpc({type: 'route', projectId: result.project.id, currentRequest: message, sourceTitle: sourceTitle()});
       pending = null;
-        show('Opened ' + result.project.name, 'The source conversation reference and original request were handed off.', [['Send here instead', sendHere], ['Dismiss', hide]]);
+      show('Opened ' + result.project.name, 'The source conversation title and current request were prepared. The original conversation remains open.', [['Send here instead', sendHere], ['Dismiss', hide]]);
     } catch (e) {
       pending = null;
-      show('Could not route', e.message + ' Your original request is still in the source composer. You can retry without losing it.', [
-        ['Retry routing', () => {pending = message; return route(result, message);}], ['Send here', sendHere], ['Dismiss', hide]
+      const preserved = fromAssistantSuggestion ? 'The request remains in the source conversation.' : 'Your original request is still in the source composer.';
+      show('Could not route', e.message + ' ' + preserved + ' You can retry without losing it.', [
+        ['Retry routing', () => {pending = message; return route(result, message, {fromAssistantSuggestion});}], ['Send here', sendHere], ['Dismiss', hide]
       ]);
     } finally { busy = false; }
   }
@@ -102,12 +133,59 @@
     pending = message;
     // Attachments cannot be transferred through a text handoff.
     const attachment = document.querySelector('[data-testid*="attachment"], [data-testid*="file-preview"], [data-testid*="upload-preview"]');
-    if (result.level === 'high' && settings.autoRoute && !attachment) { void route(result, message); return; }
     show('Continue in ' + result.project.name + '?', 'Matched: ' + (result.hits.join(', ') || result.project.name) + '. Only text is carried over; check attachments before routing.', [
       ['Route with context', () => route(result, message)], ['Send here', sendHere], ['Keep editing', () => {pending = null; hide(); el.focus();}]
     ]);
   }
   for (const type of ['keydown', 'click', 'submit']) window.addEventListener(type, intercept, true);
+  const seenRouteSuggestions = new Set();
+  const pendingRouteSuggestions = new Map();
+  try { for (const key of JSON.parse(sessionStorage.getItem('scr:seen-route-suggestions') || '[]')) seenRouteSuggestions.add(key); } catch {}
+  function latestUserRequest() {
+    const messages = [...document.querySelectorAll('[data-message-author-role="user" i]')];
+    const last = messages.at(-1);
+    return (last?.innerText || last?.textContent || '').replace(/\r\n?/g, '\n');
+  }
+  function inspectAssistantRouteSuggestions() {
+    if (!ready) return;
+    const messages = [...document.querySelectorAll('[data-message-author-role="assistant" i]')];
+    for (const messageNode of messages.slice(-4)) {
+      const text = messageNode.innerText || messageNode.textContent || '';
+      if (!/```scr-route/i.test(text)) continue;
+      const dedupeKey = messageNode.getAttribute('data-message-id') || text;
+      if (seenRouteSuggestions.has(dedupeKey) || pendingRouteSuggestions.get(dedupeKey)?.text === text) continue;
+      clearTimeout(pendingRouteSuggestions.get(dedupeKey)?.timer);
+      const timer = setTimeout(() => {
+        pendingRouteSuggestions.delete(dedupeKey);
+        if (!messageNode.isConnected || (messageNode.innerText || messageNode.textContent || '') !== text || seenRouteSuggestions.has(dedupeKey)) return;
+        handleRouteSuggestion(text, dedupeKey);
+      }, 900);
+      pendingRouteSuggestions.set(dedupeKey, {text,timer});
+    }
+  }
+  function handleRouteSuggestion(text, dedupeKey) {
+      seenRouteSuggestions.add(dedupeKey);
+      if (seenRouteSuggestions.size > 50) seenRouteSuggestions.delete(seenRouteSuggestions.values().next().value);
+      try { sessionStorage.setItem('scr:seen-route-suggestions', JSON.stringify([...seenRouteSuggestions])); } catch {}
+      const parsed = SCR.parseRouteSuggestion(text, settings.projects, settings.configVersion || SCR.protocol.configVersion);
+      if (!parsed.ok) {
+        show('Routing suggestion not accepted', parsed.error + ' Copy the latest activation prompt and use the registered Project IDs.', [['Dismiss', hide]]);
+        return;
+      }
+      const request = latestUserRequest();
+      if (!request.trim()) {
+        show('Routing suggestion needs a request', 'No preceding user request could be identified. Continue manually or provide the request before switching.', [['Dismiss', hide]]);
+        return;
+      }
+      show('Continue in ' + parsed.project.name + '?', parsed.reason + ' ChatGPT suggested this Project. Confirm before switching.', [
+        ['Continue in Project', () => route(parsed, request, {fromAssistantSuggestion:true})], ['Stay here', hide]
+      ]);
+  }
+  let routeSuggestionTimer;
+  if (document.documentElement) new MutationObserver(() => {
+    clearTimeout(routeSuggestionTimer);
+    routeSuggestionTimer = setTimeout(inspectAssistantRouteSuggestions, 250);
+  }).observe(document.documentElement, {subtree:true, childList:true, characterData:true});
   document.addEventListener('input', e => {
     if (e.target !== composer() && !composer()?.contains(e.target)) return;
     pending = null; bypass = false;
@@ -139,8 +217,10 @@
   }
   async function init() {
     try {
-      settings = (await chrome.storage.local.get('settings')).settings || SCR.defaults;
+      const stored = await chrome.storage.local.get('settings');
+      settings = SCR.migrateSettings(stored.settings);
       ready = true;
+      inspectAssistantRouteSuggestions();
       const {record} = await rpc({type: 'get'});
       if (!record) return;
       destination = true;
@@ -148,6 +228,13 @@
       const currentRequest = typeof record.current_request === 'string' ? record.current_request : '';
       let approvedText = record.text;
       const reviewText = () => panel?.querySelector('[aria-label="Review and edit handoff text"]')?.value || record.text;
+      const updateReviewWithTitle = () => {
+        const title = panel?.querySelector('[aria-label="Source conversation title"]')?.value.trim();
+        if (!title) throw Error('Enter a source conversation title first, or continue with the request only.');
+        approvedText = SCR.createReferenceHandoff({currentRequest, source:{title}, destination:record.destination, id:record.id, referenceEnabled:true}).text;
+        const area = panel?.querySelector('[aria-label="Review and edit handoff text"]');
+        if (area) area.value = approvedText;
+      };
       const insertApproved = () => {
         insert(approvedText);
         show('Handoff inserted', 'Review the draft and press ChatGPT’s Send button when ready. Nothing has been submitted.', [
@@ -156,12 +243,14 @@
       };
       const insertReviewed = () => { approvedText = reviewText(); insertApproved(); };
       show('Routed to ' + record.project, (composerReady ? 'Review or edit the source reference and request, then insert it into the composer. It will not be sent automatically.' : 'The destination composer did not appear yet. Review or copy the handoff below and retry Insert when the composer is ready.') + ' ChatGPT may not be able to access the source conversation.', [
-        ['Insert reviewed handoff', insertReviewed], ['Use request only', () => { const area = panel?.querySelector('[aria-label="Review and edit handoff text"]'); if (area) area.value = 'Current request:\n' + currentRequest; }],
+        ...(record.reference_enabled && !record.source?.title ? [['Add title reference', updateReviewWithTitle]] : []),
+        ['Insert reviewed handoff', insertReviewed], ['Use current request only', () => { approvedText = 'Current request:\n' + currentRequest; const area = panel?.querySelector('[aria-label="Review and edit handoff text"]'); if (area) area.value = approvedText; }],
         ['Undo routing', () => rpc({type: 'undo'})], ['Dismiss', async () => {await rpc({type: 'clear'}); destination = false; hide();}]
-      ], record.text);
+      ], record.text, '', Boolean(record.reference_enabled && !record.source?.title));
     } catch (e) { console.warn('Smart Context Router:', e.message); }
   }
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'session' && changes.requestVisibleProjectScanAt) scheduleProjectScan();
     if (area === 'local' && changes.settings) settings = changes.settings.newValue || SCR.defaults;
   });
   // Keep the extension-created package available until the destination user message is confirmed in history.

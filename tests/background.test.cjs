@@ -12,8 +12,8 @@ function setup({failUpdate = false, settings = {...SCR.defaults, projects:[{id:'
   const chrome = {
     runtime: {onInstalled:{addListener(fn){installListener=fn;}}, onMessage:{addListener(fn){listener=fn;}}},
     storage: {
-      local:{async get(){return {settings};}},
-      session:{async get(key){return key===null?{...records}:{[key]:records[key]};},async set(obj){Object.assign(records,obj);},async remove(key){delete records[key];}}
+      local:{async get(){return {settings};},async set(value){Object.assign(records,value);}},
+      session:{async get(key){return key===null?{...records}:{[key]:records[key]};},async set(obj){Object.assign(records,obj);},async remove(keys){for(const key of Array.isArray(keys)?keys:[keys])delete records[key];}}
     },
     tabs:{
       onRemoved:{addListener(fn){removed=fn;}},
@@ -37,6 +37,10 @@ test('reference package is stored before navigation and scoped to target tab and
   assert.equal(result.handoff.source.url,'https://chatgpt.com/c/source-123');
   assert.ok(result.handoff.id);
   assert.ok(result.handoff.text.endsWith('Current request:\n  exact request\n'));
+  assert.ok(!result.handoff.text.includes('https://chatgpt.com'));
+  assert.ok(!result.handoff.text.includes('source-123'));
+  assert.ok(!('handoff_summary' in result.handoff));
+  assert.ok(!result.handoff.text.includes('summary'));
   assert.equal(s.actions[0][0],'create');
   assert.equal(s.actions[1][0],'update');
   assert.equal((await s.send({type:'get'})).record,undefined);
@@ -88,4 +92,39 @@ test('upgrade clears legacy history buffers without changing local settings',asy
   s.records['context:1']={messages:[{role:'user',content:'old private buffer'}]};
   await s.install();
   assert.equal(s.records['context:1'],undefined);
+});
+test('new install defaults to no Projects',async()=>{
+  assert.equal(SCR.defaults.projects.length,0);
+  assert.equal(SCR.migrateSettings(undefined).projects.length,0);
+});
+test('English UI onboarding is discovery-only and contains no memory activation step',async()=>{
+  const fs=require('node:fs');
+  const html=fs.readFileSync(require.resolve('../settings.html'),'utf8');
+  const script=fs.readFileSync(require.resolve('../settings.js'),'utf8');
+  const content=fs.readFileSync(require.resolve('../content.js'),'utf8');
+  assert.match(html,/Project discovery prompt/);
+  assert.match(html,/Copy Project discovery prompt/);
+  assert.match(html,/Review a discovery proposal/);
+  assert.doesNotMatch(html,/memory update|finish setup|memory-status/i);
+  assert.match(script,/Discovery prompt copied\./);
+  assert.doesNotMatch(script,/memory-status|finish-setup|Memory is managed by ChatGPT/);
+  assert.match(content,/Source conversation title \(optional\)/);
+});
+test('visible Project scans are validated and isolated by source tab',async()=>{
+  const s=setup();
+  const result=await s.send({type:'visible-projects',projects:[
+    {name:'  Job Searching  ',url:'https://chatgpt.com/g/g-p-job/project'},
+    {name:'External',url:'https://evil.example/g/x/project'},
+    {name:'Conversation',url:'https://chatgpt.com/c/chat-1'}
+  ]},7);
+  assert.equal(result.ok,true);
+  assert.deepEqual(JSON.parse(JSON.stringify(s.records['visible-projects:7'].projects)),[{name:'Job Searching',url:'https://chatgpt.com/g/g-p-job/project'}]);
+  assert.equal(s.records['visible-projects:1'],undefined);
+});
+test('registry apply replaces the editor with validated existing and newly matched Projects',async()=>{
+  const fs=require('node:fs');
+  const script=fs.readFileSync(require.resolve('../settings.js'),'utf8');
+  assert.match(script,/validatedImport = SCR\.validateRegistryImport\([\s\S]*currentRegistryProjects\(\), discoveredProjects\)/);
+  assert.match(script,/projects = validatedImport\.projects;/);
+  assert.match(script,/Updates applied to the editor only\. Review them and click Save settings to store\./);
 });

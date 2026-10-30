@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Smart Context Router",
-  "version": "0.1.8",
+  "version": "0.2.1",
   "description": "Route ChatGPT drafts to your saved contexts, with local matching and reversible handoffs.",
   "minimum_chrome_version": "102",
   "permissions": ["storage"],

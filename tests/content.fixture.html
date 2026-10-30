@@ -1,5 +1,6 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Resume planning - ChatGPT</title><style>.composer{min-height:32px;border:1px solid #888}.hidden{display:none}</style></head><body>
 <main>
+  <nav aria-label="Projects"><a href="https://chatgpt.com/g/g-p-alpha/project">Job Searching</a><a href="https://chatgpt.com/g/g-p-hidden/project" style="display:none">Hidden Project</a></nav>
   <div id="visible-old-conversation">This page contains visible history, but reference handoff must not copy it.</div>
   <form id="main-composer-form">
     <div id="modern-composer" class="composer" contenteditable="true" role="textbox" aria-label="Ask ChatGPT"></div>
@@ -12,24 +13,32 @@
 <pre id="results">RUNNING</pre>
 <script>
 const calls=[];
+const sessionData={};
 let changed, routeFailure=false, handoffRecord;
 const nativeAttach=Element.prototype.attachShadow;
 Element.prototype.attachShadow=function(options){return nativeAttach.call(this,{...options,mode:'open'});};
 const params=new URLSearchParams(location.search);
+if(params.has('route-suggestion')) sessionStorage.removeItem('scr:seen-route-suggestions');
 if(params.has('legacy')) {document.querySelector('#modern-composer').remove();document.querySelector('#modern-send').remove();document.querySelector('#prompt-textarea').classList.remove('hidden');document.querySelector('#legacy-send').classList.remove('hidden');}
 if(params.has('current')) {document.querySelector('#modern-composer').remove();const mobile=document.querySelector('#prompt-textarea');mobile.id='mobile-composer-prompt';mobile.classList.remove('hidden');mobile.setAttribute('aria-label','Chat with ChatGPT');mobile.setAttribute('placeholder','Ask ChatGPT');document.querySelector('#modern-send').setAttribute('aria-label','Send message');}
 if(params.has('fallback')||params.has('newchat')) {document.querySelector('#modern-composer').setAttribute('aria-label','Message');document.querySelector('#modern-send').setAttribute('aria-label','Send message');}
 if(params.has('newchat')) document.querySelector('#modern-send').remove();
 window.chrome={
- storage:{local:{async get(){return {settings:{...SCR.defaults,projects:SCR.defaults.projects.map(p=>({...p,url:'https://chatgpt.com/c/'+p.id}))}};}},onChanged:{addListener(fn){changed=fn;}}},
- runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};if(m.type==='route')return {ok:true,handoff:SCR.createReferenceHandoff({id:'source-fixture',currentRequest:m.currentRequest,source:{title:m.sourceTitle,url:location.origin+location.pathname,conversation_id:'source-id'},destination:{project:'Job Search'}})};return {ok:true};}}
+ storage:{local:{async get(){return {settings:{...SCR.defaults,projects:[{id:'job',name:'Job Search',purpose:'Career applications',keywords:['resume','cover letter','job search','interview'],url:'https://chatgpt.com/c/job',active:true}]}};}},session:{async get(keys){return Object.fromEntries(keys.map(key=>[key,sessionData[key]]));},async set(values){Object.assign(sessionData,values);}},onChanged:{addListener(fn){changed=fn;}}},
+ runtime:{async sendMessage(m){calls.push(m);if(m.type==='get')return {ok:true,record:handoffRecord};if(routeFailure)return {ok:false,error:'Simulated storage failure'};if(m.type==='visible-projects'){sessionData['visible-projects:1']={projects:m.projects,scannedAt:Date.now()};return {ok:true,count:m.projects.length};}if(m.type==='route')return {ok:true,handoff:SCR.createReferenceHandoff({id:'source-fixture',currentRequest:m.currentRequest,source:{title:m.sourceTitle,url:location.origin+location.pathname,conversation_id:'source-id'},destination:{project:'Job Search'}})};return {ok:true};}}
 };
 </script><script src="../core.js"></script><script>
 if(location.hash==='#destination') handoffRecord=SCR.createReferenceHandoff({id:'destination-fixture',currentRequest:'resume interview',source:{title:'Resume planning',url:'https://chatgpt.com/c/source-123',conversation_id:'source-123'},destination:{project:'Job Search'}});
+if(location.hash==='#no-title') handoffRecord=SCR.createReferenceHandoff({id:'destination-no-title',currentRequest:'resume interview',source:{url:'https://chatgpt.com/c/source-123',conversation_id:'source-123'},destination:{project:'Job Search'}});
+if(params.has('route-suggestion')) {
+  const user=document.createElement('div');user.setAttribute('data-message-author-role','user');user.textContent='I am switching from general chat to job applications.';document.querySelector('main').append(user);
+  const assistant=document.createElement('div');assistant.id='assistant-route-suggestion';assistant.setAttribute('data-message-author-role','assistant');assistant.setAttribute('data-message-id','assistant-route-1');assistant.textContent='```scr-route\n{"schema":1,"protocol_token":"scr-route","config_version":"1.0","project_id":"job","reason":"The task purpose shifted to job applications."}\n```';document.querySelector('main').append(assistant);
+}
 </script><script src="../content.js"></script><script>
 void (async()=>{
  const wait=()=>new Promise(resolve=>setTimeout(resolve,30));await wait();
  const out=[],el=document.querySelector('#modern-composer:not(.hidden)')||document.querySelector('#mobile-composer-prompt')||document.querySelector('#prompt-textarea'),send=document.querySelector('#modern-send:not(.hidden)')||document.querySelector('#legacy-send');let sent=0,unrelatedSent=0;
+ if(params.has('newchat')) el.focus();
  send?.addEventListener('click',()=>sent++);
  document.querySelector('#main-composer-form').addEventListener('submit',event=>event.preventDefault());
  document.querySelector('#unrelated-send').addEventListener('click',()=>unrelatedSent++);
@@ -40,21 +49,52 @@ void (async()=>{
  const button=label=>[...document.querySelectorAll('div')].flatMap(node=>node.shadowRoot?[...node.shadowRoot.querySelectorAll('button')]:[]).find(item=>item.textContent===label);
  const extensionRoot=()=>[...document.querySelectorAll('div')].find(node=>node.shadowRoot)?.shadowRoot;
  try{
+  if(params.has('route-suggestion')){
+   await new Promise(resolve=>setTimeout(resolve,1100));
+   check(!!button('Continue in Project'),'valid assistant route suggestion requires user confirmation');
+   check(calls.filter(call=>call.type==='route').length===0&&sent===0,'assistant suggestion never switches or submits automatically');
+   button('Stay here').click();await wait();
+   document.querySelector('#assistant-route-suggestion').append(document.createTextNode(' '));
+   await new Promise(resolve=>setTimeout(resolve,1100));
+   check(!button('Continue in Project')&&calls.filter(call=>call.type==='route').length===0,'rerendered suggestion is suppressed');
+   const stale=document.createElement('div');stale.setAttribute('data-message-author-role','assistant');stale.setAttribute('data-message-id','assistant-route-stale');stale.textContent='```scr-route\n{"schema":1,"protocol_token":"old-token","config_version":"1.0","project_id":"job","reason":"stale"}\n```';document.querySelector('main').append(stale);
+  for(let attempt=0;attempt<30&&!(extensionRoot()?.textContent||'').includes('Routing suggestion not accepted');attempt++) await new Promise(resolve=>setTimeout(resolve,100));
+  check((extensionRoot()?.textContent||'').includes('Routing suggestion not accepted'),'stale protocol is explicitly rejected');
+   document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';return;
+  }
   if(handoffRecord){
+    for(let attempt=0;attempt<30&&!button('Insert reviewed handoff');attempt++) await new Promise(resolve=>setTimeout(resolve,100));
    check(!!button('Insert reviewed handoff'),'reference handoff appears at destination');
    const review=extensionRoot().querySelector('[aria-label="Review and edit handoff text"]');
-   check(review.value.includes('Title: Resume planning')&&review.value.includes('Conversation ID: source-123'),'source title and ID are inspectable');
-   check(review.value.includes('URL: https://chatgpt.com/c/source-123'),'source URL is inspectable');
-   check(review.value.includes('Do not infer or fabricate'),'destination is instructed not to invent source details');
+   if(location.hash==='#no-title'){
+     check(!review.value.includes('Unavailable')&&!review.value.includes('source-123'),'missing source title does not invent or expose a title, URL, or ID');
+     check(!!extensionRoot().querySelector('[aria-label="Source conversation title"]'),'missing title offers an optional user input');
+     check(!!button('Add title reference')&&!!button('Use current request only'),'missing title allows request-only fallback');
+     const titleInput=extensionRoot().querySelector('[aria-label="Source conversation title"]');
+     titleInput.value='User supplied title';button('Add title reference').click();await wait();
+     check(extensionRoot().querySelector('[aria-label="Review and edit handoff text"]').value.includes('Source conversation: "User supplied title"'),'user title is inserted only after confirmation');
+     document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';return;
+   }
+  check(review.value.includes('Source conversation: "Resume planning"'),'source title is inspectable');
+  check(!review.value.includes('https://chatgpt.com')&&!review.value.includes('source-123'),'source URL and ID are never shown to the model');
+  check(review.value.includes('Do not fabricate its contents'),'destination is instructed not to invent source details');
    check(review.value.includes('Current request:\nresume interview'),'request is present verbatim');
    check(!review.value.includes('This page contains visible history'),'source history is not copied');
-   button('Use request only').click();await wait();
-   check(review.value==='Current request:\nresume interview','request-only option removes reference');
-   review.value=handoffRecord.text;el.focus();button('Insert reviewed handoff').click();await wait();
-   check(currentValue().includes('Title: Resume planning'),'reviewed reference is inserted');
+  check(!review.value.includes('handoff_summary')&&!review.value.includes('ASSISTANT:'),'no summary or source messages are present');
+  if(params.has('request-only')){
+    button('Use current request only').click();await wait();
+    check(review.value==='Current request:\nresume interview','request-only option removes reference');
+  }
+   el.focus();button('Insert reviewed handoff').click();await wait();
+   check(params.has('request-only') || location.hash==='#no-title'
+     ? currentValue()==='Current request:\nresume interview'
+     : currentValue().includes('Source conversation: "Resume planning"'),'reviewed handoff variant is inserted');
    check(sent===0,'insert does not submit automatically');
    if(params.has('newchat')){document.querySelector('#results').textContent=out.join('\n')+'\nALL PASSED';return;}
   }else{
+    await new Promise(resolve=>setTimeout(resolve,500));
+    check(sessionData['visible-projects:1']?.projects.length===1,'only visible ChatGPT Project link is scanned');
+    check(sessionData['visible-projects:1'].projects[0].name==='Job Searching'&&sessionData['visible-projects:1'].projects[0].url==='https://chatgpt.com/g/g-p-alpha/project','visible Project name and URL captured');
    document.querySelector('#unrelated-send').click();draft('resume interview');document.querySelector('#unrelated-send').click();
    check(unrelatedSent===2&&calls.filter(call=>call.type==='route').length===0,'unrelated form and Send are not intercepted');
    draft('hello there');send.click();check(sent===1,'low-confidence request sends normally');
@@ -64,6 +104,7 @@ void (async()=>{
    const routed=calls.find(call=>call.type==='route');
    check(routed.currentRequest==='resume interview','unsent request passed unchanged');
    check(routed.sourceTitle==='Resume planning','source title captured');
+  check(!routed.currentRequest.includes('https://')&&!routed.currentRequest.includes('source-id'),'route request carries no source URL or ID');
   check(!routed.messages&&!routed.recent_messages,'route contains no copied conversation history');
    const sourceText=SCR.createReferenceHandoff({id:'verify',currentRequest:routed.currentRequest,source:{title:routed.sourceTitle,url:location.origin+location.pathname,conversation_id:'source-id'},destination:{project:'Job Search'}}).text;
    check(sourceText.includes('URL: '+location.origin+location.pathname),'source URL available to handoff');
