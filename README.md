@@ -2,6 +2,18 @@
 
 A local Chrome extension that intercepts ChatGPT text drafts at send time and offers the right saved conversation or Project. No build step, API key, backend, or external dependencies.
 
+## Store graphics
+
+<p align="center">
+	<img src="store-assets/marquee-promo-tile.png" alt="Smart Chat Switcher marquee promo tile" width="700">
+</p>
+
+<p align="center">
+	<img src="store-assets/small-promo-tile.png" alt="Smart Chat Switcher small promo tile" width="220">
+</p>
+
+Store screenshots (1280 × 800): [Privacy consent](store-assets/screenshot-01-privacy-consent.png) · [Settings proposal](store-assets/screenshot-02-settings-proposal.png) · [Route suggestion](store-assets/screenshot-03-route-suggestion.png) · [Handoff review](store-assets/screenshot-04-handoff-review.png)
+
 ## Install
 
 1. Keep this folder on your computer (unzip the download first if needed).
