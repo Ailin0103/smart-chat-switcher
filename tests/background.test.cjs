@@ -24,7 +24,7 @@ function setup({failUpdate = false, settings = {...SCR.defaults, projects:[{id:'
   };
   vm.runInNewContext(fs.readFileSync(require.resolve('../background.js'),'utf8'), {chrome,SCR,importScripts(){},Date,URL,crypto:webcrypto,Math});
   const send = (message, tab=1, url='https://chatgpt.com/c/source-123') => new Promise(resolve => listener(message,{tab:{id:tab},url},resolve));
-  return {send,records,actions,install:()=>installListener()};
+  return {send,records,actions,install:()=>installListener(),removeTab:id=>removed(id)};
 }
 
 test('reference package is stored before navigation and scoped to target tab and URL', async()=>{
@@ -87,6 +87,26 @@ test('dismissal clears only the destination handoff; Undo restores source',async
   assert.deepEqual(s.actions.slice(-2).map(action=>action.slice(0,2)),[['update',1],['remove',2]]);
   assert.equal(s.records['handoff:2'],undefined);
 });
+test('assistant suggestion deduplication stores only bounded hashes per tab',async()=>{
+  const s=setup();
+  const keys=Array.from({length:55},(_,index)=>'sha256:'+index.toString(16).padStart(64,'0'));
+  for(const key of keys) assert.equal((await s.send({type:'markSeenRouteSuggestion',key})).ok,true);
+  assert.equal(s.records['seen-suggestions:1'].length,50);
+  assert.deepEqual(JSON.parse(JSON.stringify(s.records['seen-suggestions:1'])),keys.slice(-50));
+  assert.deepEqual(JSON.parse(JSON.stringify((await s.send({type:'getSeenRouteSuggestions'})).keys)),keys.slice(-50));
+  assert.deepEqual(JSON.parse(JSON.stringify((await s.send({type:'getSeenRouteSuggestions'},2)).keys)),[]);
+  assert.equal((await s.send({type:'markSeenRouteSuggestion',key:'full assistant response'})).ok,false);
+  s.removeTab(1);
+  assert.equal(s.records['seen-suggestions:1'],undefined);
+});
+test('handoff expiry is enforced on lookup rather than by a timer',async()=>{
+  const s=setup();
+  await s.send({type:'route',projectId:'job',currentRequest:'temporary request'});
+  s.records['handoff:2'].created=Date.now()-30*60*1000-1;
+  assert.ok(s.records['handoff:2'],'expired data remains until a lookup checks it');
+  assert.equal((await s.send({type:'get'},2,'https://chatgpt.com/c/job')).record,undefined);
+  assert.equal(s.records['handoff:2'],undefined);
+});
 test('upgrade clears legacy history buffers without changing local settings',async()=>{
   const s=setup();
   s.records['context:1']={messages:[{role:'user',content:'old private buffer'}]};
@@ -103,11 +123,18 @@ test('English UI onboarding is discovery-only and contains no memory activation 
   const script=fs.readFileSync(require.resolve('../settings.js'),'utf8');
   const content=fs.readFileSync(require.resolve('../content.js'),'utf8');
   assert.match(html,/Project discovery prompt/);
-  assert.match(html,/Copy Project discovery prompt/);
-  assert.match(html,/edit the prompt after pasting it into ChatGPT/);
-  assert.match(html,/keywords you use most/);
+  assert.match(html,/Copy prompt/);
+  assert.match(html,/Copy the prompt below, paste it into ChatGPT, and send it\. Then copy its reply and come back here\./);
   assert.match(html,/id="activation-prompt"[^>]*readonly/);
-  assert.match(html,/Review a discovery proposal/);
+  assert.match(html,/1\. Ask ChatGPT about your projects/);
+  assert.match(html,/2\. Paste ChatGPT’s reply/);
+  assert.match(html,/ChatGPT’s JSON reply below/);
+  assert.match(html,/placeholder="Paste ChatGPT’s JSON reply here…"/);
+  assert.match(html,/Preview suggestion/);
+  assert.match(script,/Suggest this destination/);
+  assert.match(script,/What belongs here\?/);
+  assert.match(script,/ChatGPT chat or Project link/);
+  assert.match(script,/Keywords and phrases \(separated by commas\)/);
   assert.doesNotMatch(html,/memory update|finish setup|memory-status/i);
   assert.match(script,/Discovery prompt copied\./);
   assert.doesNotMatch(script,/memory-status|finish-setup|Memory is managed by ChatGPT/);
@@ -119,5 +146,5 @@ test('registry apply replaces the editor with validated existing and newly match
   assert.match(script,/validatedImport = SCR\.validateRegistryImport\([\s\S]*currentRegistryProjects\(\)\)/);
   assert.doesNotMatch(script,/discoveredProjects|refresh-projects|requestProjectScan/);
   assert.match(script,/projects = validatedImport\.projects;/);
-  assert.match(script,/Updates applied to the editor only\. Review them and click Save settings to store\./);
+  assert.match(script,/Review your projects below, then click Save settings\./);
 });

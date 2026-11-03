@@ -56,6 +56,8 @@ test('discovery prompt asks ChatGPT to identify recurring work and returns JSON 
   assert.ok(prompt.includes('Do not ask me to prepare a Project list first.'));
   assert.ok(prompt.includes('If I use more than one language, include natural keywords in each relevant language'));
   assert.ok(prompt.includes('the actual terms, synonyms, and informal phrases I use'));
+  assert.ok(prompt.includes('put each keyword or phrase in its own string in the supporting_keywords array'));
+  assert.ok(prompt.includes('separate each entry with a comma (for example: resume, CV, interview)'));
   assert.ok(prompt.includes('"简历"'));
   assert.ok(prompt.includes('"schema": "scr-project-discovery-v1"'));
   assert.ok(prompt.includes('"supporting_keywords": ["<relevant keyword or phrase>"]'));

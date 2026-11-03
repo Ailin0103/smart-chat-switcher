@@ -16,7 +16,7 @@ function draw() {
     const title = document.createElement('h2'); title.textContent = p.name || 'New destination';
     const remove = document.createElement('button'); remove.textContent = 'Remove'; remove.onclick = () => {projects = projects.filter(x => x !== p); draw();};
     row.append(title, remove); card.append(row);
-    for (const [key, caption, type] of [['active', 'Active', 'checkbox'], ['name', 'Name', 'text'], ['purpose', 'Purpose', 'textarea'], ['discoveryStatus', 'Discovery status', 'select'], ['discoveryBasis', 'Basis', 'textarea'], ['url', 'ChatGPT conversation or Project URL', 'url'], ['keywords', 'Supporting keywords (comma-separated)', 'text']]) {
+    for (const [key, caption, type] of [['active', 'Suggest this destination', 'checkbox'], ['name', 'Name', 'text'], ['purpose', 'What belongs here?', 'textarea'], ['discoveryStatus', 'Discovery status', 'select'], ['discoveryBasis', 'Basis', 'textarea'], ['url', 'ChatGPT chat or Project link', 'url'], ['keywords', 'Keywords and phrases (separated by commas)', 'text']]) {
       const label = document.createElement('label'); label.textContent = caption;
       const input = type === 'textarea' ? document.createElement('textarea') : type === 'select' ? document.createElement('select') : document.createElement('input');
       if (type === 'select') {
@@ -101,7 +101,7 @@ $('#apply-registry').onclick = () => {
   validatedImport = null;
   $('#apply-registry').disabled = true;
   $('#registry-preview').replaceChildren();
-  $('#registry-status').textContent = 'Updates applied to the editor only. Review them and click Save settings to store.';
+  $('#registry-status').textContent = 'Review your projects below, then click Save settings.';
   draw();
 };
 $('#registry-import').addEventListener('input', () => {validatedImport = null; $('#apply-registry').disabled = true;});

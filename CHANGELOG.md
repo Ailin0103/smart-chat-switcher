@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Added first-use page-data disclosure and consent, moved assistant-suggestion deduplication to bounded extension session storage, and clarified data handling and retention.
+- Removed visible Project scanning and its background/session-storage path; Projects are configured manually.
+- Improved Project discovery prompts with multilingual keywords and topic-specific synonyms.
+- Added Smart Chat Switcher extension icons and prompt customization guidance.
+
 ## 0.2.1
 
 - Removed prefilled sample Projects from fresh installs; removes only untouched legacy sample placeholders during migration while preserving customized destinations.

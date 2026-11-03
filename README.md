@@ -52,16 +52,22 @@ This is user-confirmed routing followed by user-controlled final sending. It doe
 
 Numbers describe heuristic strength, **not calibrated probabilities**. English keywords use word boundaries. Keyword frequency does not boost a score. Only active, confirmed destinations with valid URLs participate. The local matcher does not reason about purpose, negation, quotations, or topic shifts; it only creates a confirmation suggestion. For example, the local matcher may still match “do not discuss my resume” because it contains “resume.” Assistant-generated `scr-route` suggestions are checked against the exact protocol and require user confirmation.
 
-Context handoff is title-only: it includes the original conversation title when available and the exact unsent request. It does not copy source history or send a URL, conversation ID, or summary to the model. If the title is unavailable, the user can enter one at the destination or continue with the request only. Internal source tab/URL data is retained only for navigation and Undo.
+The model-facing handoff contains the source conversation title when available and the exact current request. It does not include the source URL, conversation ID, assistant replies, or earlier user messages. The title is only a reference; ChatGPT may not be able to retrieve that conversation. If the title is unavailable, you can enter one at the destination or continue with the request only.
 
 ## Privacy and permissions
 
-- Only the `storage` API permission and a content script matching `https://chatgpt.com/*` are declared.
-- Settings and destination mappings use `chrome.storage.local` and remain on the device.
-- The title-only handoff package uses `chrome.storage.session`, keyed to the intended destination tab. It contains no source URL, ID, summary, or copied conversation history.
-- Handoffs expire after 30 minutes and are removed on cancellation or when the destination tab closes. Chrome also clears session storage when the browser session ends.
-- Text inserted into ChatGPT becomes visible to ChatGPT like any normal draft; sending it is your action.
-- No broad `tabs` permission is needed for creating, activating, or closing the extension's destination tab.
+Smart Chat Switcher handles page and draft data locally to provide its user-confirmed routing feature. The first-use notice explains this access and asks for agreement before the content script inspects message text.
+
+- When you try to send a text draft, the extension reads the current composer text and compares it with your saved destination names and keywords in local code. A nonmatching draft is not stored by the extension.
+- While routing is enabled, it checks the text of at most the four most recently loaded assistant message elements on the current ChatGPT page for a `scr-route` suggestion. If a valid suggestion is found, it reads the latest loaded user message as the request shown in the confirmation. After you send at a destination, it compares the draft with loaded user-message elements to verify that the message appeared. It does not fetch account-wide or unloaded conversation history.
+- On a confirmed route, the extension reads the current page title and URL metadata and the configured destination. It uses these to open the destination and prepare a reviewable handoff. The handoff text contains only the source title (if available) and the exact current request; source URL and conversation ID stay in extension state and are not included in the text sent to ChatGPT.
+- `chrome.storage.local` stores `privacyConsentVersion` and a `settings` object with `enabled`, `autoRoute` (forced false), `includeContext`, `configVersion`, and `projects`. Each project can contain `id`, `name`, `purpose`, `keywords`, `url`, `active`, `discoveryStatus`, and `discoveryBasis`.
+- `chrome.storage.session` stores a tab-keyed handoff record: `version`, `id`, `source` (`url`, `title`, `conversation_id`), `destination` (`project_id`, `project`, `url`, `conversation_id`), `current_request`, `reference_enabled`, and `text`, plus top-level `project`, `url`, `sourceId`, and `created`. It also stores at most 50 `sha256:<64 hex characters>` suggestion keys per tab. The digest is a bounded deduplication key, not anonymization; assistant reply text itself is not stored there.
+- The old release stored a JSON array under the ChatGPT page's `sessionStorage` key `scr:seen-route-suggestions`, containing up to 50 message IDs or, when an ID was unavailable, full assistant reply text. On the next content-script load after updating, the extension removes that key. After cleanup, the current release does not read or set this website storage.
+- Handoffs are cleared on dismissal/completion, when the destination tab closes, and when Chrome clears extension session storage (including browser restart or extension reload/update). Their 30-minute age is checked only when the handoff is looked up; there is no timer that guarantees deletion at minute 30. A record already retrieved can remain until one of the other cleanup events.
+- Remove configured destinations in Settings. Uninstalling the extension clears `chrome.storage.local`; session storage is cleared when the extension is unloaded. To remove any legacy website session data before the updated script next runs, clear site data for `chatgpt.com` in Chrome.
+- The extension makes no direct `fetch`, XHR, WebSocket, or beacon requests and sends no telemetry; it uses no analytics or advertising service. A confirmed route causes Chrome to navigate to your saved ChatGPT URL. When you choose to insert and send the reviewed text, ChatGPT receives it through its normal interface and handles it under its own policies.
+- The manifest declares the `storage` permission and injects a content script only on `https://chatgpt.com/*`. Storage is needed for saved destinations, consent, tab-specific handoffs, and bounded suggestion deduplication. ChatGPT page access is needed to read the current draft, inspect loaded messages for the optional assistant-suggestion feature, and insert a handoff only after your review. No broad `tabs` permission is requested.
 
 ## Files
 
@@ -101,7 +107,7 @@ Manual checks on ChatGPT after loading the extension:
 
 ## Compatibility and scope
 
-The implementation reads page title and URL metadata internally, but the model-facing handoff contains only the title and current request. It does not inspect source conversation messages or call backend endpoints.
+The implementation reads page title and URL metadata for a confirmed route and inspects only message elements loaded in the current ChatGPT page for the disclosed suggestion and send-verification features. It does not call an extension-owned backend or retrieve unloaded conversation history.
 
 - Text only: attachments, voice, images, tools, and model selection do not transfer. Recognized attachment markers are best-effort; review them before confirming a route. Use **Send here** for uploads.
 - Only the main composer and normal Enter, send-button click, and containing-form submit paths are covered. Edit-message flows and other send shortcuts are outside this MVP.

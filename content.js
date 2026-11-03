@@ -1,4 +1,5 @@
 (() => {
+  try { sessionStorage.removeItem('scr:seen-route-suggestions'); } catch {}
   let settings = SCR.defaults, ready = false, busy = false, bypass = false, pending = null, destination = false, destinationDraft = '', destinationSubmitPending = false;
   let host, panel;
   const visible = el => {
@@ -50,7 +51,7 @@
     host.style.cssText = 'position:fixed;bottom:100px;right:24px;z-index:2147483647;max-width:calc(100vw - 32px)';
     const shadow = host.attachShadow({mode: 'closed'});
     const style = document.createElement('style');
-    style.textContent = ':host{all:initial}section{box-sizing:border-box;width:390px;max-width:calc(100vw - 32px);padding:22px;background:#fff;color:#172b2a;border:1px solid #cddbd6;border-radius:18px;box-shadow:0 12px 50px #0003;font:14px/1.5 system-ui}h2{font-size:17px;margin:0 0 8px}p{margin:0 0 14px}button{font:inherit;border:1px solid #baccc5;border-radius:9px;background:#edf5f0;color:#173e31;padding:8px 12px;margin:4px 6px 0 0;cursor:pointer}button:focus-visible,textarea:focus-visible{outline:3px solid #48a784}textarea{box-sizing:border-box;width:100%;height:180px;font:13px/1.5 system-ui;padding:10px;border:1px solid #baccc5;border-radius:8px}small{display:block;color:#547268;margin-bottom:8px}';
+    style.textContent = ':host{all:initial}section{box-sizing:border-box;width:390px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);overflow:auto;padding:22px;background:#fff;color:#172b2a;border:1px solid #cddbd6;border-radius:18px;box-shadow:0 12px 50px #0003;font:14px/1.5 system-ui}h2{font-size:17px;margin:0 0 8px}p{margin:0 0 14px}button{font:inherit;border:1px solid #baccc5;border-radius:9px;background:#edf5f0;color:#173e31;padding:8px 12px;margin:4px 6px 0 0;cursor:pointer}button:focus-visible,textarea:focus-visible{outline:3px solid #48a784}textarea{box-sizing:border-box;width:100%;height:180px;font:13px/1.5 system-ui;padding:10px;border:1px solid #baccc5;border-radius:8px}small{display:block;color:#547268;margin-bottom:8px}';
     panel = document.createElement('section'); panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'Smart Chat Switcher');
     const label = document.createElement('small'); label.textContent = 'SMART CHAT SWITCHER';
     const heading = document.createElement('h2'); heading.textContent = title;
@@ -119,33 +120,42 @@
   for (const type of ['keydown', 'click', 'submit']) window.addEventListener(type, intercept, true);
   const seenRouteSuggestions = new Set();
   const pendingRouteSuggestions = new Map();
-  try { for (const key of JSON.parse(sessionStorage.getItem('scr:seen-route-suggestions') || '[]')) seenRouteSuggestions.add(key); } catch {}
+  function routeSuggestionIdentity(messageNode, text) {
+    const messageId = messageNode.getAttribute('data-message-id');
+    return messageId ? 'message-id:' + messageId : text;
+  }
+  async function routeSuggestionKey(identity) {
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity));
+    const digest = [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    return 'sha256:' + digest;
+  }
   function latestUserRequest() {
     const messages = [...document.querySelectorAll('[data-message-author-role="user" i]')];
     const last = messages.at(-1);
     return (last?.innerText || last?.textContent || '').replace(/\r\n?/g, '\n');
   }
-  function inspectAssistantRouteSuggestions() {
-    if (!ready) return;
+  async function inspectAssistantRouteSuggestions() {
+    if (!ready || !settings.enabled) return;
     const messages = [...document.querySelectorAll('[data-message-author-role="assistant" i]')];
     for (const messageNode of messages.slice(-4)) {
       const text = messageNode.innerText || messageNode.textContent || '';
       if (!/```scr-route/i.test(text)) continue;
-      const dedupeKey = messageNode.getAttribute('data-message-id') || text;
-      if (seenRouteSuggestions.has(dedupeKey) || pendingRouteSuggestions.get(dedupeKey)?.text === text) continue;
-      clearTimeout(pendingRouteSuggestions.get(dedupeKey)?.timer);
-      const timer = setTimeout(() => {
+      const dedupeKey = await routeSuggestionKey(routeSuggestionIdentity(messageNode, text));
+      if (!ready || !settings.enabled || !messageNode.isConnected) continue;
+      if (seenRouteSuggestions.has(dedupeKey) || pendingRouteSuggestions.has(dedupeKey)) continue;
+      const timer = setTimeout(async () => {
         pendingRouteSuggestions.delete(dedupeKey);
-        if (!messageNode.isConnected || (messageNode.innerText || messageNode.textContent || '') !== text || seenRouteSuggestions.has(dedupeKey)) return;
-        handleRouteSuggestion(text, dedupeKey);
+        const currentText = messageNode.innerText || messageNode.textContent || '';
+        if (!ready || !settings.enabled || !messageNode.isConnected || seenRouteSuggestions.has(dedupeKey) || await routeSuggestionKey(routeSuggestionIdentity(messageNode, currentText)) !== dedupeKey) return;
+        handleRouteSuggestion(currentText, dedupeKey);
       }, 900);
-      pendingRouteSuggestions.set(dedupeKey, {text,timer});
+      pendingRouteSuggestions.set(dedupeKey, {timer});
     }
   }
   function handleRouteSuggestion(text, dedupeKey) {
       seenRouteSuggestions.add(dedupeKey);
       if (seenRouteSuggestions.size > 50) seenRouteSuggestions.delete(seenRouteSuggestions.values().next().value);
-      try { sessionStorage.setItem('scr:seen-route-suggestions', JSON.stringify([...seenRouteSuggestions])); } catch {}
+      void rpc({type:'markSeenRouteSuggestion', key:dedupeKey}).catch(() => {});
       const parsed = SCR.parseRouteSuggestion(text, settings.projects, settings.configVersion || SCR.protocol.configVersion);
       if (!parsed.ok) {
         show('Routing suggestion not accepted', parsed.error + ' Copy the latest activation prompt and use the registered Project IDs.', [['Dismiss', hide]]);
@@ -196,9 +206,28 @@
   }
   async function init() {
     try {
-      const stored = await chrome.storage.local.get('settings');
+      const stored = await chrome.storage.local.get(['settings','privacyConsentVersion']);
       settings = SCR.migrateSettings(stored.settings);
+      if (stored.privacyConsentVersion !== 1) {
+        show('Privacy and page access', 'Before routing starts, this extension reads the draft when you try to send and matches it against your saved keywords on this device. It checks up to four loaded assistant messages for routing suggestions, may read the latest loaded user message for a suggestion, and checks loaded user messages after a destination send. It stores up to 50 fixed-length SHA-256 digests per tab to suppress repeat suggestions, not the reply text. After you confirm a route, it temporarily stores the source title, URL and ID, destination, and request. You choose whether to insert and send a reviewed handoff. A confirmed route opens your saved ChatGPT URL; no data is sent to an extension server or analytics.', [
+          ['Agree and continue', async () => {
+            ready = true;
+            try {
+              await chrome.storage.local.set({privacyConsentVersion:1});
+              hide();
+              await init();
+            } catch (e) {
+              ready = false;
+              throw e;
+            }
+          }],
+          ['Not now', hide]
+        ]);
+        return;
+      }
       ready = true;
+      const {keys = []} = await rpc({type:'getSeenRouteSuggestions'});
+      for (const key of keys) if (typeof key === 'string' && key.length <= 80) seenRouteSuggestions.add(key);
       inspectAssistantRouteSuggestions();
       const {record} = await rpc({type: 'get'});
       if (!record) return;
@@ -226,7 +255,13 @@
         ['Insert reviewed handoff', insertReviewed], ['Use current request only', () => { approvedText = 'Current request:\n' + currentRequest; const area = panel?.querySelector('[aria-label="Review and edit handoff text"]'); if (area) area.value = approvedText; }],
         ['Undo routing', () => rpc({type: 'undo'})], ['Dismiss', async () => {await rpc({type: 'clear'}); destination = false; hide();}]
       ], record.text, '', Boolean(record.reference_enabled && !record.source?.title));
-    } catch (e) { console.warn('Smart Chat Switcher:', e.message); }
+    } catch (e) {
+      ready = false;
+      console.warn('Smart Chat Switcher:', e.message);
+      show('Could not start Smart Chat Switcher', e.message + ' Reload the extension and refresh this ChatGPT tab, then retry.', [
+        ['Retry', init], ['Dismiss', hide]
+      ]);
+    }
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) settings = changes.settings.newValue || SCR.defaults;

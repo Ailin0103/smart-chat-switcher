@@ -101,6 +101,7 @@ For each project you can identify:
 - If you know the ongoing workstream but cannot verify its ChatGPT folder name, use a descriptive name and mark it as "needs_confirmation".
 - Write one concise sentence describing what belongs in that project, specific to my work.
 - Include up to eight supporting keywords or phrases.
+- In this JSON, put each keyword or phrase in its own string in the supporting_keywords array; do not combine them into one comma-separated string. If I enter keywords manually in Settings instead of importing this JSON, I must separate each entry with a comma (for example: resume, CV, interview).
 - Choose keywords in the languages I commonly use, based on the available context. If I use more than one language, include natural keywords in each relevant language so the Project can match when I switch languages.
 - Include the actual terms, synonyms, and informal phrases I use when discussing that topic, not only formal labels or the Project name. For example, for a resume workstream, consider terms such as "resume", "CV", "简历", or "求职材料" when they fit my language and usage.
 - Include the exact Project URL only if it is genuinely available. Otherwise leave it empty.

@@ -9,21 +9,20 @@
 <body>
 	<main>
 				<div class="eyebrow">SMART CHAT SWITCHER / SETTINGS</div>
-		<h1>Give each thought a destination.</h1>
-		<p>Save a few ChatGPT conversations or Project URLs. Matching runs locally when you press Send.</p>
+		<h1>Find the right chat for your next thought.</h1>
+		<p>Choose the chats and Projects you want to return to. When your message matches their keywords, Smart Chat Switcher suggests a switch. You decide whether to go.</p>
 		<section class="card">
-			<h2>Project discovery prompt</h2>
-			<p>Ask ChatGPT to identify your recurring workstreams. Review its JSON proposal below before changing any settings.</p>
-			<p>You can edit the prompt after pasting it into ChatGPT. Add details about your projects and the keywords you use most, including terms in your usual languages, to help Smart Chat Switcher match future chats more accurately.</p>
+			<h2>1. Ask ChatGPT about your projects</h2>
+			<p>Copy the prompt below, paste it into ChatGPT, and send it. Then copy its reply and come back here.</p>
 			<textarea id="activation-prompt" aria-label="Project discovery prompt" readonly></textarea>
-			<div class="actions"><button id="copy-activation" type="button">Copy Project discovery prompt</button></div>
+			<div class="actions"><button id="copy-activation" type="button">Copy prompt</button></div>
 			<p id="prompt-status" role="status" aria-live="polite"></p>
 		</section>
 		<section class="card">
-			<h2>Review a discovery proposal</h2>
-			<p>Paste the JSON response here. Empty results are valid and do not change your settings.</p>
-			<label>Discovery JSON<textarea id="registry-import" placeholder="Paste the JSON proposal here"></textarea></label>
-			<div class="actions"><button id="validate-registry" type="button">Validate proposal</button><button id="apply-registry" type="button" disabled>Apply to editor</button></div>
+			<h2>2. Paste ChatGPT’s reply</h2>
+			<p>Paste ChatGPT’s JSON reply below. We’ll check it and show you the suggested projects to review.</p>
+			<label>ChatGPT’s reply<textarea id="registry-import" placeholder="Paste ChatGPT’s JSON reply here…"></textarea></label>
+			<div class="actions"><button id="validate-registry" type="button">Check reply</button><button id="apply-registry" type="button" disabled>Use these projects</button></div>
 			<p id="registry-status" role="status" aria-live="polite"></p>
 			<div id="registry-preview"></div>
 		</section>
@@ -36,9 +35,9 @@
 		<div class="actions"><button id="add" type="button">+ Add destination</button><button class="primary" id="save" type="button">Save settings</button></div>
 		<p id="status" role="status" aria-live="polite"></p>
 		<section class="card">
-			<h2>Try the matcher</h2>
+			<h2>Try a message</h2>
 			<label>Message<textarea id="test" placeholder="Help me rewrite my resume for an interview"></textarea></label>
-			<button id="classify" type="button">Check match</button>
+			<button id="classify" type="button">Preview suggestion</button>
 			<p id="result" role="status"></p>
 			<small>Uses the form above. Scores are heuristic strengths, not probabilities. Add destination URLs to enable matching.</small>
 		</section>

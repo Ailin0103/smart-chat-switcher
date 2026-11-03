@@ -1,5 +1,6 @@
 importScripts('core.js');
 const PREFIX = 'handoff:';
+const SUGGESTIONS_PREFIX = 'seen-suggestions:';
 const TTL = 30 * 60 * 1000;
 chrome.runtime.onInstalled.addListener(async () => {
   const sessionItems = await chrome.storage.session.get(null);
@@ -8,7 +9,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   const {settings} = await chrome.storage.local.get('settings');
   await chrome.storage.local.set({settings: SCR.migrateSettings(settings)});
 });
-chrome.tabs.onRemoved.addListener(id => chrome.storage.session.remove(PREFIX + id));
+chrome.tabs.onRemoved.addListener(id => chrome.storage.session.remove([PREFIX + id, SUGGESTIONS_PREFIX + id]));
 function conversationId(url) { return url.match(/\/c\/([\w-]+)/)?.[1] || null; }
 async function handle(m, sender) {
   if (!sender.tab || !sender.url?.startsWith('https://chatgpt.com/')) throw Error('Unsupported sender');
@@ -40,6 +41,21 @@ async function handle(m, sender) {
       await chrome.tabs.update(tab.id, {url, active: true});
       return {ok: true, handoff};
     } catch (e) { await chrome.tabs.remove(tab.id); throw e; }
+  }
+  if (m.type === 'getSeenRouteSuggestions') {
+    const storageKey = SUGGESTIONS_PREFIX + sender.tab.id;
+    const stored = await chrome.storage.session.get(storageKey);
+    const keys = stored[storageKey];
+    return {ok:true, keys:Array.isArray(keys) ? keys.filter(value => typeof value === 'string' && value.length <= 80).slice(-50) : []};
+  }
+  if (m.type === 'markSeenRouteSuggestion') {
+    if (typeof m.key !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(m.key)) throw Error('Invalid suggestion identifier');
+    const storageKey = SUGGESTIONS_PREFIX + sender.tab.id;
+    const stored = await chrome.storage.session.get(storageKey);
+    const keys = Array.isArray(stored[storageKey]) ? stored[storageKey].filter(value => typeof value === 'string' && value.length <= 80) : [];
+    if (!keys.includes(m.key)) keys.push(m.key);
+    await chrome.storage.session.set({[storageKey]:keys.slice(-50)});
+    return {ok:true};
   }
   const record = (await chrome.storage.session.get(key))[key];
   if (record && Date.now() - record.created > TTL) { await chrome.storage.session.remove(key); return {ok: true}; }
