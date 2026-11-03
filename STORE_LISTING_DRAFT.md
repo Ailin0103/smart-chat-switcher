@@ -61,28 +61,18 @@ The extension makes no direct fetch, XHR, WebSocket, beacon, or telemetry reques
 - Do not claim that no user data is handled just because matching is local. Chrome's FAQ explicitly requires local processing/storage to be disclosed.
 - Complete every limited-use certification only if it matches the released code: data is used for the single disclosed routing purpose, is not sold or used for ads, and is not shared with an extension backend or analytics provider.
 
-## Privacy policy text draft
+## Privacy policy
 
-Smart Chat Switcher handles information from the current chatgpt.com page to provide local destination matching and user-confirmed handoffs. A first-use disclosure explains this access and asks for agreement before the content script inspects message text.
+Policy source: https://github.com/Ailin0103/smart-chat-switcher/blob/main/privacy.md
 
-When you try to send a text draft, the extension reads the current composer text and compares it locally with destination names and keywords configured by you. It does not store a draft that has no match. While routing is enabled, it checks the text of up to four most recently loaded assistant message elements on the current page for an explicit `scr-route` suggestion. When a valid suggestion is present, it reads the latest loaded user message to prepare the request shown in the confirmation. After you send at a destination, it compares the pending draft with user-message elements loaded on that page to verify that the message appeared. It does not retrieve the complete account history or messages that are not loaded in the current page.
+Use the public GitHub URL above in the Chrome Web Store Developer Dashboard after confirming the repository is publicly accessible.
 
-For a route you confirm, the extension reads the current page title and URL and the selected saved destination. `chrome.storage.local` stores `privacyConsentVersion` and a `settings` object with `enabled`, `autoRoute` (forced false), `includeContext`, `configVersion`, and `projects`. Each project can contain `id`, `name`, `purpose`, `keywords`, `url`, `active`, `discoveryStatus`, and `discoveryBasis`. `chrome.storage.session` stores a tab-keyed handoff record: `version`, `id`, `source` (`url`, `title`, `conversation_id`), `destination` (`project_id`, `project`, `url`, `conversation_id`), `current_request`, `reference_enabled`, and `text`, plus top-level `project`, `url`, `sourceId`, and `created`. It also stores at most 50 per-tab SHA-256 digests derived from assistant message IDs or, when no ID is available, assistant message text. These digests are bounded identifiers, not anonymization; assistant reply text is not persisted in extension storage.
-
-The handoff is intended for review in the destination composer. Its text contains the source title when available and the exact current request, but not the source URL, conversation ID, assistant replies, or earlier user messages. A title does not guarantee that ChatGPT can retrieve the source conversation. The extension never sends the handoff automatically. If you choose to insert and send it, ChatGPT receives it through its normal interface and handles it under its own terms and privacy policy.
-
-The current release removes the previous release's `scr:seen-route-suggestions` key on content-script load and otherwise does not read or write website `sessionStorage`. The legacy key held a JSON array of up to 50 message IDs or full assistant reply texts where no ID existed. Handoff age is checked only when the record is looked up: an item older than 30 minutes at that check is removed, but there is no timer guaranteeing deletion at 30 minutes. A record already retrieved can remain past that age until dismissed, marked done, detected as delivered, its tab closes, or Chrome clears extension session storage on browser restart or extension reload/update. The settings in `chrome.storage.local` remain until changed or the extension is removed. Users can remove destinations in Settings; uninstalling the extension clears its local storage. Users can clear chatgpt.com site data in Chrome to remove any legacy page session data before the updated content script next runs.
-
-The extension makes no direct fetch, XHR, WebSocket, beacon, or telemetry requests and does not operate an extension-owned server. A confirmed route navigates Chrome to the configured ChatGPT URL; the user may separately choose to send the handoff through ChatGPT. The extension uses no analytics or advertising service and does not send user data to the developer. Its use of information received from Chrome APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements.
-
-Users can remove saved destinations in the extension Settings or remove the extension to clear its locally stored data.
-
-Before publication, host this policy at a public URL and add that URL to the Developer Dashboard. Add a real developer contact method if the dashboard or applicable law requires one; none is supplied in this repository. Confirm the hosted policy reflects the final uploaded code and applicable legal requirements.
+The canonical policy is [`privacy.md`](privacy.md). Keep this file and the Dashboard declaration aligned with the actual uploaded release. Add a real developer contact method if the Dashboard or applicable law requires one; none is supplied in this repository.
 
 ## Remaining submission items
 
 - Capture at least one genuine 1280 x 800 screenshot of the extension UI; do not use test fixtures or synthetic product claims.
-- Host the privacy policy above at a public URL and enter that URL in the developer dashboard. No public URL is currently supplied.
+- Enter https://github.com/Ailin0103/smart-chat-switcher/blob/main/privacy.md as the privacy policy URL in the Developer Dashboard after confirming public access.
 - Supply a developer contact address if required; no contact information is currently supplied.
 - Sign in to the Chrome Web Store Developer Dashboard and complete Google's account verification directly.
 - Upload `Smart-Chat-Switcher-0.2.2.zip`.

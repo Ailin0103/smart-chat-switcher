@@ -68,6 +68,8 @@ The model-facing handoff contains the source conversation title when available a
 
 ## Privacy and permissions
 
+See the [Privacy Policy](privacy.md) for the full data-handling and retention details.
+
 Smart Chat Switcher handles page and draft data locally to provide its user-confirmed routing feature. The first-use notice explains this access and asks for agreement before the content script inspects message text.
 
 - When you try to send a text draft, the extension reads the current composer text and compares it with your saved destination names and keywords in local code. A nonmatching draft is not stored by the extension.
